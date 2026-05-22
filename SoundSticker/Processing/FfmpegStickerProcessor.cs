@@ -126,7 +126,9 @@ public sealed class FfmpegStickerProcessor(
         var audioInputIndex = sticker.AudioMode == StickerAudioMode.UseMedia ? 1 : 0;
         var audioStart = ToSeconds(sticker.AudioTrimStartMs);
         var audioDuration = ToSeconds(sticker.AudioDurationMs);
-        var audioFilter = $"[{audioInputIndex}:a:0]atrim=start={audioStart}:duration={audioDuration},asetpts=PTS-STARTPTS[a]";
+        var audioFilter =
+            $"[{audioInputIndex}:a:0]atrim=start={audioStart}:duration={audioDuration}," +
+            $"asetpts=PTS-STARTPTS,apad,atrim=duration={videoDuration}[a]";
 
         return $"{videoFilter};{audioFilter}";
     }

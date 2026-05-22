@@ -155,6 +155,15 @@ inspect the file:
 
 This metadata is intended for video preview screens and timeline range controls.
 
+Sticker creation validates trim ranges against this preview metadata. Upload the
+media again after FFprobe is configured if preview metadata is missing.
+
+## Audio Duration Rule
+
+The video trim range controls the final sticker duration. If a selected audio
+clip is longer than the video clip, audio is trimmed to the video duration. If
+the selected audio clip is shorter, the rest of the sticker stays silent.
+
 ## Current MVP Notes
 
 - Uploaded files and generated stickers are stored on disk.

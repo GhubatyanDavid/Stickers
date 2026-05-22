@@ -202,6 +202,11 @@ static async Task<IResult> CreateVideoStickerAsync(
         return Results.BadRequest(new ProblemResponse("Source media must be a video."));
     }
 
+    if (!HasUsablePreview(sourceMedia))
+    {
+        return Results.BadRequest(new ProblemResponse("Source video preview metadata is unavailable. Check FFprobe and upload the file again."));
+    }
+
     if (request.CoverImageId.HasValue)
     {
         var coverImage = repository.GetMediaFile(request.CoverImageId.Value);
@@ -220,6 +225,16 @@ static async Task<IResult> CreateVideoStickerAsync(
     if (durationMs > stickerOptions.Value.MaxDurationMs)
     {
         return Results.BadRequest(new ProblemResponse($"Sticker can be at most {stickerOptions.Value.MaxDurationMs} ms."));
+    }
+
+    if (IsOutsideMediaDuration(request.TrimEndMs, sourceMedia))
+    {
+        return Results.BadRequest(new ProblemResponse("Video trim range exceeds the source video duration."));
+    }
+
+    if (!Enum.IsDefined(request.AudioMode))
+    {
+        return Results.BadRequest(new ProblemResponse("Audio mode is invalid."));
     }
 
     var audioTrimStartMs = request.AudioTrimStartMs ?? request.TrimStartMs;
@@ -249,10 +264,37 @@ static async Task<IResult> CreateVideoStickerAsync(
         {
             return Results.BadRequest(new ProblemResponse("Audio source media must be audio or video."));
         }
+
+        if (!HasUsablePreview(audioSourceMedia))
+        {
+            return Results.BadRequest(new ProblemResponse("Audio source preview metadata is unavailable. Check FFprobe and upload the file again."));
+        }
+
+        if (!audioSourceMedia.Preview!.HasAudio)
+        {
+            return Results.BadRequest(new ProblemResponse("Audio source media does not contain an audio stream."));
+        }
+
+        if (IsOutsideMediaDuration(audioTrimEndMs, audioSourceMedia))
+        {
+            return Results.BadRequest(new ProblemResponse("Audio trim range exceeds the audio source duration."));
+        }
     }
     else if (request.AudioSourceMediaId.HasValue)
     {
         return Results.BadRequest(new ProblemResponse("Audio source media can only be used with UseMedia mode."));
+    }
+    else if (request.AudioMode == StickerAudioMode.KeepOriginal)
+    {
+        if (!sourceMedia.Preview!.HasAudio)
+        {
+            return Results.BadRequest(new ProblemResponse("Source video does not contain an audio stream. Use Mute or choose another audio source."));
+        }
+
+        if (IsOutsideMediaDuration(audioTrimEndMs, sourceMedia))
+        {
+            return Results.BadRequest(new ProblemResponse("Audio trim range exceeds the source video duration."));
+        }
     }
 
     var sticker = Sticker.CreateVideoSticker(
@@ -271,3 +313,9 @@ static async Task<IResult> CreateVideoStickerAsync(
 
     return Results.Accepted($"/api/stickers/{sticker.Id}", StickerResponse.FromDomain(sticker));
 }
+
+static bool HasUsablePreview(MediaFile mediaFile) =>
+    mediaFile.Preview?.DurationMs is > 0;
+
+static bool IsOutsideMediaDuration(int trimEndMs, MediaFile mediaFile) =>
+    mediaFile.Preview?.DurationMs is long durationMs && trimEndMs > durationMs;

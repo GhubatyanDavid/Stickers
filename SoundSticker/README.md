@@ -71,6 +71,10 @@ Uploaded audio, video, and GIF responses include a `preview` block when FFprobe
 can read duration and stream information. Video and GIF previews also include a
 thumbnail URL generated under `/media/previews`.
 
+Sticker requests validate trim ranges against preview duration metadata. The
+video trim range controls the final output length: longer audio is trimmed to
+the video duration, and shorter audio is padded with silence.
+
 Use a different part of the source video's audio:
 
 ```json
