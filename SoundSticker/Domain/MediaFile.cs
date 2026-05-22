@@ -1,0 +1,58 @@
+namespace SoundSticker.Domain;
+
+public sealed class MediaFile
+{
+    private MediaFile(
+        Guid id,
+        string originalFileName,
+        MediaKind kind,
+        string contentType,
+        long sizeBytes,
+        string relativePath,
+        string publicUrl,
+        DateTimeOffset createdAt)
+    {
+        Id = id;
+        OriginalFileName = originalFileName;
+        Kind = kind;
+        ContentType = contentType;
+        SizeBytes = sizeBytes;
+        RelativePath = relativePath;
+        PublicUrl = publicUrl;
+        CreatedAt = createdAt;
+    }
+
+    public Guid Id { get; }
+
+    public string OriginalFileName { get; }
+
+    public MediaKind Kind { get; }
+
+    public string ContentType { get; }
+
+    public long SizeBytes { get; }
+
+    public string RelativePath { get; }
+
+    public string PublicUrl { get; }
+
+    public DateTimeOffset CreatedAt { get; }
+
+    public static MediaFile Create(
+        Guid id,
+        string originalFileName,
+        MediaKind kind,
+        string? contentType,
+        long sizeBytes,
+        string relativePath,
+        string publicUrl) =>
+        new(
+            id,
+            Path.GetFileName(originalFileName),
+            kind,
+            string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType,
+            sizeBytes,
+            relativePath,
+            publicUrl,
+            DateTimeOffset.UtcNow);
+}

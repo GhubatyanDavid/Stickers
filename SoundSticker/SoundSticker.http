@@ -1,0 +1,49 @@
+@SoundSticker_HostAddress = http://localhost:5258
+@MediaId = 00000000-0000-0000-0000-000000000000
+@AudioMediaId = 00000000-0000-0000-0000-000000000000
+@StickerId = 00000000-0000-0000-0000-000000000000
+
+GET {{SoundSticker_HostAddress}}/api/health
+Accept: application/json
+
+###
+
+GET {{SoundSticker_HostAddress}}/api/media
+Accept: application/json
+
+###
+
+GET {{SoundSticker_HostAddress}}/api/stickers
+Accept: application/json
+
+###
+
+POST {{SoundSticker_HostAddress}}/api/stickers/from-video
+Content-Type: application/json
+
+{
+  "sourceMediaId": "{{MediaId}}",
+  "trimStartMs": 0,
+  "trimEndMs": 5000,
+  "audioMode": "KeepOriginal"
+}
+
+###
+
+POST {{SoundSticker_HostAddress}}/api/stickers/from-video
+Content-Type: application/json
+
+{
+  "sourceMediaId": "{{MediaId}}",
+  "trimStartMs": 7000,
+  "trimEndMs": 12000,
+  "audioMode": "UseMedia",
+  "audioSourceMediaId": "{{AudioMediaId}}",
+  "audioTrimStartMs": 2000,
+  "audioTrimEndMs": 7000
+}
+
+###
+
+GET {{SoundSticker_HostAddress}}/api/stickers/{{StickerId}}/status
+Accept: application/json
