@@ -36,6 +36,8 @@ public sealed class MediaFile
 
     public string PublicUrl { get; }
 
+    public MediaPreview? Preview { get; private set; }
+
     public DateTimeOffset CreatedAt { get; }
 
     public static MediaFile Create(
@@ -55,4 +57,9 @@ public sealed class MediaFile
             relativePath,
             publicUrl,
             DateTimeOffset.UtcNow);
+
+    public void SetPreview(MediaPreview preview)
+    {
+        Preview = preview;
+    }
 }

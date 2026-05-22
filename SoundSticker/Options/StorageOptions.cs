@@ -11,6 +11,8 @@ public sealed class StorageOptions
 
     public string StickersPath { get; set; } = "stickers";
 
+    public string PreviewsPath { get; set; } = "previews";
+
     public long MaxUploadBytes { get; set; } = 100 * 1024 * 1024;
 
     public string GetResolvedRootPath(string contentRootPath) =>

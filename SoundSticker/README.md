@@ -5,6 +5,7 @@ ASP.NET Core backend for the sound sticker MVP.
 ## What works now
 
 - Upload local media files.
+- Return preview metadata for timeline controls after upload.
 - Store uploaded media under `storage/originals`.
 - Create a video sticker job from an uploaded video.
 - Keep original video audio, mute it, or use audio from another uploaded audio/video file.
@@ -28,12 +29,14 @@ http://localhost:5258/api/health
 
 ## Important
 
-Video trimming needs FFmpeg. Install FFmpeg and make sure `ffmpeg` is available in `PATH`, or set:
+Video trimming needs FFmpeg. Timeline preview metadata uses FFprobe. Install
+both tools and make sure `ffmpeg` and `ffprobe` are available in `PATH`, or set:
 
 ```json
 {
   "Ffmpeg": {
-    "ExecutablePath": "C:\\path\\to\\ffmpeg.exe"
+    "ExecutablePath": "C:\\path\\to\\ffmpeg.exe",
+    "ProbeExecutablePath": "C:\\path\\to\\ffprobe.exe"
   }
 }
 ```
@@ -63,6 +66,10 @@ GET  /api/stickers/{id}/status
 ```
 
 Use `"Mute"` for silent stickers.
+
+Uploaded audio, video, and GIF responses include a `preview` block when FFprobe
+can read duration and stream information. Video and GIF previews also include a
+thumbnail URL generated under `/media/previews`.
 
 Use a different part of the source video's audio:
 

@@ -9,6 +9,7 @@ public sealed record MediaFileResponse(
     string ContentType,
     long SizeBytes,
     string Url,
+    MediaPreviewResponse? Preview,
     DateTimeOffset CreatedAt)
 {
     public static MediaFileResponse FromDomain(MediaFile mediaFile) =>
@@ -19,5 +20,6 @@ public sealed record MediaFileResponse(
             mediaFile.ContentType,
             mediaFile.SizeBytes,
             mediaFile.PublicUrl,
+            MediaPreviewResponse.FromDomain(mediaFile.Preview),
             mediaFile.CreatedAt);
 }

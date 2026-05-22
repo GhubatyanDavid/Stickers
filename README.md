@@ -11,6 +11,8 @@ file.
 ## Highlights
 
 - Upload video, audio, image, and GIF files.
+- Return duration, video dimensions, audio presence, and video thumbnail data
+  for timeline previews after upload.
 - Keep original uploads under local storage.
 - Create video sticker jobs with a maximum duration of 5 seconds.
 - Trim the video track and audio track from different time ranges.
@@ -48,6 +50,8 @@ Requirements:
 
 - .NET 10 SDK
 - FFmpeg available in `PATH`, or an explicit `Ffmpeg:ExecutablePath`
+- FFprobe available in `PATH`, or an explicit `Ffmpeg:ProbeExecutablePath` for
+  preview duration metadata
 
 Start the API:
 
@@ -67,7 +71,8 @@ If FFmpeg is not available in `PATH`, configure it in app settings:
 ```json
 {
   "Ffmpeg": {
-    "ExecutablePath": "C:\\path\\to\\ffmpeg.exe"
+    "ExecutablePath": "C:\\path\\to\\ffmpeg.exe",
+    "ProbeExecutablePath": "C:\\path\\to\\ffprobe.exe"
   }
 }
 ```
@@ -128,6 +133,27 @@ Attach audio from another uploaded audio or video file:
 ```
 
 Use `"Mute"` as the audio mode for a silent sticker.
+
+## Media Preview Data
+
+Uploaded audio, video, and GIF media include a `preview` block when FFprobe can
+inspect the file:
+
+```json
+{
+  "id": "uploaded-video-id",
+  "url": "/media/originals/video.mp4",
+  "preview": {
+    "durationMs": 18420,
+    "width": 1080,
+    "height": 1920,
+    "hasAudio": true,
+    "thumbnailUrl": "/media/previews/uploaded-video-id.jpg"
+  }
+}
+```
+
+This metadata is intended for video preview screens and timeline range controls.
 
 ## Current MVP Notes
 

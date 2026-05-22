@@ -39,6 +39,7 @@ builder.Services.Configure<FfmpegOptions>(builder.Configuration.GetSection(Ffmpe
 builder.Services.AddSingleton<IMediaRepository, InMemoryMediaRepository>();
 builder.Services.AddSingleton<ILocalFileStorage, LocalFileStorage>();
 builder.Services.AddSingleton<StickerProcessingQueue>();
+builder.Services.AddSingleton<IMediaPreviewAnalyzer, FfmpegMediaPreviewAnalyzer>();
 builder.Services.AddSingleton<IStickerProcessor, FfmpegStickerProcessor>();
 builder.Services.AddHostedService<StickerProcessingWorker>();
 
@@ -130,6 +131,7 @@ static async Task<IResult> UploadMediaAsync(
     IFormFile file,
     ILocalFileStorage storage,
     IMediaRepository repository,
+    IMediaPreviewAnalyzer previewAnalyzer,
     IOptions<StorageOptions> options,
     CancellationToken cancellationToken)
 {
@@ -172,6 +174,12 @@ static async Task<IResult> UploadMediaAsync(
         savedFile.PublicUrl);
 
     repository.AddMediaFile(mediaFile);
+
+    var preview = await previewAnalyzer.AnalyzeAsync(mediaFile, cancellationToken);
+    if (preview is not null)
+    {
+        mediaFile.SetPreview(preview);
+    }
 
     return Results.Created($"/api/media/{mediaFile.Id}", MediaFileResponse.FromDomain(mediaFile));
 }
