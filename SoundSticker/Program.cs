@@ -125,6 +125,9 @@ api.MapGet("/stickers/{id:guid}/status", (Guid id, IMediaRepository repository) 
 })
 .WithName("GetStickerStatus");
 
+api.MapDelete("/stickers/{id:guid}", DeleteSticker)
+    .WithName("DeleteSticker");
+
 app.Run();
 
 static async Task<IResult> UploadMediaAsync(
@@ -319,3 +322,51 @@ static bool HasUsablePreview(MediaFile mediaFile) =>
 
 static bool IsOutsideMediaDuration(int trimEndMs, MediaFile mediaFile) =>
     mediaFile.Preview?.DurationMs is long durationMs && trimEndMs > durationMs;
+
+static IResult DeleteSticker(
+    Guid id,
+    IMediaRepository repository,
+    IOptions<StorageOptions> storageOptions)
+{
+    var existingSticker = repository.GetSticker(id);
+    if (existingSticker is null)
+    {
+        return Results.NotFound();
+    }
+
+    if (existingSticker.Status == StickerStatus.Processing)
+    {
+        return Results.Conflict(new ProblemResponse("Sticker is currently processing and cannot be deleted."));
+    }
+
+    var removedSticker = repository.RemoveSticker(id);
+    if (removedSticker is null)
+    {
+        return Results.NotFound();
+    }
+
+    DeleteStickerOutputFile(removedSticker, storageOptions.Value);
+    return Results.NoContent();
+}
+
+static void DeleteStickerOutputFile(Sticker sticker, StorageOptions storageOptions)
+{
+    if (string.IsNullOrWhiteSpace(sticker.OutputRelativePath))
+    {
+        return;
+    }
+
+    var storageRoot = storageOptions.GetResolvedRootPath(Directory.GetCurrentDirectory());
+    var fullPath = Path.GetFullPath(Path.Combine(storageRoot, sticker.OutputRelativePath));
+    var fullStorageRoot = Path.GetFullPath(storageRoot);
+
+    if (!fullPath.StartsWith(fullStorageRoot, StringComparison.OrdinalIgnoreCase))
+    {
+        return;
+    }
+
+    if (File.Exists(fullPath))
+    {
+        File.Delete(fullPath);
+    }
+}

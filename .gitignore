@@ -5,3 +5,5 @@
 *.suo
 SoundSticker/storage/
 SoundSticker/ffmpeg.exe
+SoundSticker/ffplay.exe
+SoundSticker/ffprobe.exe

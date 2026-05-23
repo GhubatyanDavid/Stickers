@@ -47,3 +47,7 @@ Content-Type: application/json
 
 GET {{SoundSticker_HostAddress}}/api/stickers/{{StickerId}}/status
 Accept: application/json
+
+###
+
+DELETE {{SoundSticker_HostAddress}}/api/stickers/{{StickerId}}

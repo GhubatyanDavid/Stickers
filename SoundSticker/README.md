@@ -12,6 +12,7 @@ ASP.NET Core backend for the sound sticker MVP.
 - Trim video and audio tracks from different time ranges.
 - Process sticker jobs in a background worker.
 - Save generated MP4 stickers under `storage/stickers`.
+- Delete old or failed sticker jobs and their generated MP4 files.
 - Serve local media files from `/media`.
 
 ## Run locally
@@ -52,6 +53,7 @@ POST /api/stickers/from-video
 GET  /api/stickers
 GET  /api/stickers/{id}
 GET  /api/stickers/{id}/status
+DELETE /api/stickers/{id}
 ```
 
 ## Create video sticker request

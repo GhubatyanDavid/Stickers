@@ -29,4 +29,7 @@ public sealed class InMemoryMediaRepository : IMediaRepository
 
     public IReadOnlyCollection<Sticker> GetStickers() =>
         _stickers.Values.OrderByDescending(sticker => sticker.CreatedAt).ToArray();
+
+    public Sticker? RemoveSticker(Guid id) =>
+        _stickers.TryRemove(id, out var sticker) ? sticker : null;
 }

@@ -15,4 +15,6 @@ public interface IMediaRepository
     Sticker? GetSticker(Guid id);
 
     IReadOnlyCollection<Sticker> GetStickers();
+
+    Sticker? RemoveSticker(Guid id);
 }

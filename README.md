@@ -14,7 +14,7 @@ file.
 - Return duration, video dimensions, audio presence, and video thumbnail data
   for timeline previews after upload.
 - Keep original uploads under local storage.
-- Create video sticker jobs with a maximum duration of 5 seconds.
+- Create video sticker jobs with a maximum duration of 30 seconds.
 - Trim the video track and audio track from different time ranges.
 - Reuse audio from the source video or attach audio from another uploaded file.
 - Process stickers asynchronously and query their status.
@@ -89,11 +89,12 @@ POST /api/stickers/from-video
 GET  /api/stickers
 GET  /api/stickers/{id}
 GET  /api/stickers/{id}/status
+DELETE /api/stickers/{id}
 ```
 
 ## Sticker Requests
 
-Create a 5-second sticker with the source video's matching audio:
+Create a sticker with the source video's matching audio:
 
 ```json
 {
@@ -167,6 +168,8 @@ the selected audio clip is shorter, the rest of the sticker stays silent.
 ## Current MVP Notes
 
 - Uploaded files and generated stickers are stored on disk.
+- Deleting a sticker removes its in-memory job record and generated MP4 file
+  when one exists.
 - Media and sticker metadata are currently kept in memory.
 - Restarting the API clears the metadata lists even when stored files still
   exist locally.
