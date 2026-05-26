@@ -27,7 +27,8 @@ All JSON enum values are serialized as strings.
 - Return preview metadata for audio, video, and GIF files when FFprobe can read
   them.
 - Generate a thumbnail URL for uploaded video and GIF files.
-- Create a video sticker job from an uploaded video.
+- Create a moving video sticker job from an uploaded video.
+- Create an image sticker job by looping an uploaded image into MP4.
 - Use matching audio from the source video.
 - Mute the sticker.
 - Use audio from another uploaded audio or video file.
@@ -39,12 +40,13 @@ All JSON enum values are serialized as strings.
 ## Current MVP Limits
 
 - Sticker output is MP4 video.
-- Sticker video duration is limited to 5 seconds by current config.
+- Sticker duration is limited by `Sticker:MaxDurationMs` (`30000` ms in the
+  committed app settings).
 - Metadata is stored in memory. Restarting the backend clears media and sticker
   lists even if files still exist on disk.
-- Creating a sticker currently requires source preview duration metadata.
-  FFprobe must be configured before uploading media used for sticker creation.
-- There is no delete endpoint yet.
+- Creating a video sticker currently requires source preview duration metadata.
+  FFprobe must be configured before uploading video media used for sticker
+  creation. Still image stickers do not require source preview duration.
 - There is no progress percentage yet. Poll status instead.
 - `CoverImageId` exists in the request/response contract, but the current video
   processor does not use the cover image during export yet.
@@ -52,10 +54,12 @@ All JSON enum values are serialized as strings.
 ## Recommended Frontend Workflow
 
 1. Check backend health with `GET /api/health`.
-2. Upload the main video with `POST /api/uploads`.
-3. Read `media.preview.durationMs` and show a video trim range control.
+2. Upload the main video or image with `POST /api/uploads`.
+3. For videos, read `media.preview.durationMs` and show a trim range control.
+   For images, choose a sticker duration and send it as `trimEndMs - trimStartMs`.
 4. For custom audio, upload another audio or video file and use its media id.
-5. Create a sticker job with `POST /api/stickers/from-video`.
+5. Create a sticker job with `POST /api/stickers/from-video` or
+   `POST /api/stickers/from-image`.
 6. Poll `GET /api/stickers/{id}/status` until status is `Ready` or `Failed`.
 7. When ready, play or download `outputUrl`.
 
@@ -282,7 +286,9 @@ Note:
 
 Purpose:
 
-- Queue a video sticker export job.
+- Queue a sticker export job from an uploaded video or image. This endpoint is
+  backward-compatible with existing clients that already post image sources to
+  the video route.
 
 Success:
 
@@ -293,7 +299,7 @@ Required fields:
 
 ```json
 {
-  "sourceMediaId": "uploaded-video-id",
+  "sourceMediaId": "uploaded-video-or-image-id",
   "trimStartMs": 0,
   "trimEndMs": 5000,
   "audioMode": "KeepOriginal"
@@ -365,6 +371,38 @@ Use video seconds 7-12 and another uploaded media item's audio seconds 2-7:
 }
 ```
 
+#### Image Sticker Request
+
+Use an uploaded image as the visual source and attach audio from another
+uploaded audio or video file:
+
+```json
+{
+  "sourceMediaId": "uploaded-image-id",
+  "trimStartMs": 0,
+  "trimEndMs": 5000,
+  "audioMode": "UseMedia",
+  "audioSourceMediaId": "uploaded-audio-or-video-id",
+  "audioTrimStartMs": 2000,
+  "audioTrimEndMs": 7000
+}
+```
+
+For image sources:
+
+- The image is looped into the generated MP4 for `trimEndMs - trimStartMs`.
+- Use `Mute` or `UseMedia`; `KeepOriginal` is invalid for images.
+- Source preview duration metadata is not required.
+
+### POST /api/stickers/from-image
+
+Purpose:
+
+- Queue a sticker export job from an uploaded image. The request and response
+  shape are the same as `POST /api/stickers/from-video`.
+
+### Shared Sticker Validation
+
 Custom audio source requirements:
 
 - `audioSourceMediaId` is required for `UseMedia`.
@@ -375,23 +413,24 @@ Trim validation rules:
 
 - `trimStartMs` must be `>= 0`.
 - `trimEndMs` must be greater than `trimStartMs`.
-- Video trim duration must not exceed the configured max sticker duration.
+- Sticker duration must not exceed the configured max sticker duration.
 - Video trim end must not exceed source video duration.
 - Non-muted audio trim start/end must be valid.
 - Audio trim end must not exceed its selected audio source duration.
 
 Audio duration behavior:
 
-- Final sticker duration comes from the video trim range.
-- Long audio is trimmed to the video duration.
-- Short audio is padded with silence until the video ends.
+- Final sticker duration comes from the source trim range.
+- Long audio is trimmed to the sticker duration.
+- Short audio is padded with silence until the sticker ends.
 
 Common sticker validation errors:
 
 - Source media does not exist.
-- Source media is not video.
+- Source media is not video or image.
 - Source or audio preview metadata is unavailable.
 - Source video has no audio when `KeepOriginal` is requested.
+- Image source uses `KeepOriginal`.
 - Audio source does not exist.
 - Audio source has no audio stream.
 - Invalid audio mode.
@@ -449,21 +488,24 @@ Recommended polling behavior:
 
 ### Upload Screen
 
-- Use one upload control for the main video.
+- Use one upload control for the main video or image.
 - Use a second optional upload control for custom audio.
 - Audio source can be an audio file or another video file.
 
 ### Timeline Controls
 
-- Use `preview.durationMs` as the upper bound.
+- For video sources, use `preview.durationMs` as the upper bound.
+- For image sources, use the selected sticker duration as the source range.
 - Keep times in milliseconds in API requests.
-- Disable sticker creation when required preview duration is missing.
+- Disable video sticker creation when required preview duration is missing.
 - For `KeepOriginal`, disable audio options that require source audio when
   `preview.hasAudio` is false.
+- For image sources, hide or disable `KeepOriginal`.
 
 ### Preview Rendering
 
 - Play uploaded video from `media.url`.
+- Render uploaded images from `media.url`.
 - Show thumbnail from `media.preview.thumbnailUrl` when available.
 - Generated sticker playback uses `sticker.outputUrl` after status becomes
   `Ready`.
@@ -480,8 +522,8 @@ Recommended polling behavior:
 - Add media upload with multipart field name `file`.
 - Store returned media ids.
 - Render uploaded media preview information.
-- Build video range and optional audio range controls in milliseconds.
-- Support three audio modes: original, mute, custom media.
+- Build video/image duration and optional audio range controls in milliseconds.
+- Support original, mute, and custom media audio modes; original audio is video-only.
 - Submit sticker job.
 - Poll sticker status.
 - Render ready MP4 output.

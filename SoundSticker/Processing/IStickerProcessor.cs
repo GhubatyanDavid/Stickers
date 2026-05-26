@@ -4,7 +4,7 @@ namespace SoundSticker.Processing;
 
 public interface IStickerProcessor
 {
-    Task<ProcessedStickerFile> ProcessVideoStickerAsync(
+    Task<ProcessedStickerFile> ProcessStickerAsync(
         MediaFile sourceMedia,
         MediaFile? audioSourceMedia,
         Sticker sticker,

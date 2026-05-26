@@ -12,7 +12,7 @@ public sealed class FfmpegStickerProcessor(
     IWebHostEnvironment environment,
     ILogger<FfmpegStickerProcessor> logger) : IStickerProcessor
 {
-    public async Task<ProcessedStickerFile> ProcessVideoStickerAsync(
+    public async Task<ProcessedStickerFile> ProcessStickerAsync(
         MediaFile sourceMedia,
         MediaFile? audioSourceMedia,
         Sticker sticker,
@@ -38,6 +38,16 @@ public sealed class FfmpegStickerProcessor(
         };
 
         startInfo.ArgumentList.Add("-y");
+        if (sourceMedia.Kind == MediaKind.Image)
+        {
+            startInfo.ArgumentList.Add("-loop");
+            startInfo.ArgumentList.Add("1");
+            startInfo.ArgumentList.Add("-framerate");
+            startInfo.ArgumentList.Add("30");
+            startInfo.ArgumentList.Add("-t");
+            startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
+        }
+
         startInfo.ArgumentList.Add("-i");
         startInfo.ArgumentList.Add(sourcePath);
 
@@ -48,7 +58,7 @@ public sealed class FfmpegStickerProcessor(
         }
 
         startInfo.ArgumentList.Add("-filter_complex");
-        startInfo.ArgumentList.Add(BuildFilterGraph(sticker));
+        startInfo.ArgumentList.Add(BuildFilterGraph(sticker, sourceMedia.Kind));
         startInfo.ArgumentList.Add("-map");
         startInfo.ArgumentList.Add("[v]");
 
@@ -112,11 +122,13 @@ public sealed class FfmpegStickerProcessor(
         return path;
     }
 
-    private static string BuildFilterGraph(Sticker sticker)
+    private static string BuildFilterGraph(Sticker sticker, MediaKind sourceKind)
     {
         var videoStart = ToSeconds(sticker.TrimStartMs);
         var videoDuration = ToSeconds(sticker.DurationMs);
-        var videoFilter = $"[0:v:0]trim=start={videoStart}:duration={videoDuration},setpts=PTS-STARTPTS[v]";
+        var videoFilter = sourceKind == MediaKind.Image
+            ? $"[0:v:0]fps=30,scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1,trim=duration={videoDuration},setpts=PTS-STARTPTS[v]"
+            : $"[0:v:0]trim=start={videoStart}:duration={videoDuration},setpts=PTS-STARTPTS[v]";
 
         if (sticker.AudioMode == StickerAudioMode.Mute)
         {

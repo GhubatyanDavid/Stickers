@@ -4,9 +4,10 @@ Backend playground for creating short sound stickers from uploaded media.
 
 `SoundSticker` is an ASP.NET Core MVP that accepts local media uploads, stores
 them on disk, and uses FFmpeg in a background worker to build short MP4 sticker
-clips. Video and audio can be trimmed independently, so a sticker can keep its
-original audio, become silent, or use audio from another uploaded audio or video
-file.
+clips. Stickers can be moving video clips or looped image-based clips with
+optional audio. Video and audio can be trimmed independently, so a sticker can
+keep its original audio, become silent, or use audio from another uploaded audio
+or video file.
 
 ## Highlights
 
@@ -14,9 +15,10 @@ file.
 - Return duration, video dimensions, audio presence, and video thumbnail data
   for timeline previews after upload.
 - Keep original uploads under local storage.
-- Create video sticker jobs with a maximum duration of 30 seconds.
+- Create video and image sticker jobs with a maximum duration of 30 seconds.
 - Trim the video track and audio track from different time ranges.
 - Reuse audio from the source video or attach audio from another uploaded file.
+- Loop still images into generated MP4 stickers.
 - Process stickers asynchronously and query their status.
 - Serve generated sticker files through the local `/media` path.
 - Explore the API through Swagger during development.
@@ -38,9 +40,9 @@ Stickers/
 `-- SoundSticker/
     |-- Contracts/
     |-- Domain/
+    |-- FileStorage/
     |-- Persistence/
     |-- Processing/
-    |-- Storage/
     `-- Program.cs
 ```
 
@@ -86,6 +88,7 @@ GET  /api/media
 GET  /api/media/{id}
 GET  /api/media/{id}/file
 POST /api/stickers/from-video
+POST /api/stickers/from-image
 GET  /api/stickers
 GET  /api/stickers/{id}
 GET  /api/stickers/{id}/status
@@ -133,6 +136,21 @@ Attach audio from another uploaded audio or video file:
 }
 ```
 
+Create a sticker from an uploaded image and another uploaded audio or video
+file. The image is looped for the selected duration:
+
+```json
+{
+  "sourceMediaId": "uploaded-image-id",
+  "trimStartMs": 0,
+  "trimEndMs": 5000,
+  "audioMode": "UseMedia",
+  "audioSourceMediaId": "uploaded-audio-or-video-id",
+  "audioTrimStartMs": 2000,
+  "audioTrimEndMs": 7000
+}
+```
+
 Use `"Mute"` as the audio mode for a silent sticker.
 
 ## Media Preview Data
@@ -161,9 +179,10 @@ media again after FFprobe is configured if preview metadata is missing.
 
 ## Audio Duration Rule
 
-The video trim range controls the final sticker duration. If a selected audio
-clip is longer than the video clip, audio is trimmed to the video duration. If
-the selected audio clip is shorter, the rest of the sticker stays silent.
+The source trim range controls the final sticker duration. For still images,
+the backend loops the image for that duration. If a selected audio clip is
+longer than the sticker, audio is trimmed to the sticker duration. If the
+selected audio clip is shorter, the rest of the sticker stays silent.
 
 ## Current MVP Notes
 

@@ -33,9 +33,9 @@ public sealed class StickerProcessingWorker(
             return;
         }
 
-        if (sourceMedia.Kind != MediaKind.Video)
+        if (sourceMedia.Kind is not (MediaKind.Video or MediaKind.Image))
         {
-            sticker.MarkFailed("Only video source media is supported by this processor.");
+            sticker.MarkFailed("Only video and image source media are supported by this processor.");
             return;
         }
 
@@ -52,7 +52,7 @@ public sealed class StickerProcessingWorker(
                 return;
             }
 
-            var processedFile = await processor.ProcessVideoStickerAsync(sourceMedia, audioSourceMedia, sticker, cancellationToken);
+            var processedFile = await processor.ProcessStickerAsync(sourceMedia, audioSourceMedia, sticker, cancellationToken);
             sticker.MarkReady(processedFile.RelativePath, processedFile.PublicUrl);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

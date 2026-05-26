@@ -7,7 +7,8 @@ ASP.NET Core backend for the sound sticker MVP.
 - Upload local media files.
 - Return preview metadata for timeline controls after upload.
 - Store uploaded media under `storage/originals`.
-- Create a video sticker job from an uploaded video.
+- Create a moving video sticker job from an uploaded video.
+- Create an image sticker job from an uploaded image by looping it into MP4.
 - Keep original video audio, mute it, or use audio from another uploaded audio/video file.
 - Trim video and audio tracks from different time ranges.
 - Process sticker jobs in a background worker.
@@ -50,6 +51,7 @@ POST /api/uploads
 GET  /api/media
 GET  /api/media/{id}
 POST /api/stickers/from-video
+POST /api/stickers/from-image
 GET  /api/stickers
 GET  /api/stickers/{id}
 GET  /api/stickers/{id}/status
@@ -69,13 +71,17 @@ DELETE /api/stickers/{id}
 
 Use `"Mute"` for silent stickers.
 
+`POST /api/stickers/from-image` accepts the same request shape. For image
+sources, use `"Mute"` or `"UseMedia"` because images do not have original
+audio. The image is looped for `trimEndMs - trimStartMs` and exported as MP4.
+
 Uploaded audio, video, and GIF responses include a `preview` block when FFprobe
 can read duration and stream information. Video and GIF previews also include a
 thumbnail URL generated under `/media/previews`.
 
-Sticker requests validate trim ranges against preview duration metadata. The
-video trim range controls the final output length: longer audio is trimmed to
-the video duration, and shorter audio is padded with silence.
+Sticker requests validate video and audio trim ranges against preview duration
+metadata. The source trim range controls the final output length: longer audio
+is trimmed to the sticker duration, and shorter audio is padded with silence.
 
 Use a different part of the source video's audio:
 

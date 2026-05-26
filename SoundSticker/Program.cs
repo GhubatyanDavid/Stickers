@@ -103,6 +103,9 @@ api.MapGet("/media/{id:guid}/file", (Guid id, IMediaRepository repository, IOpti
 api.MapPost("/stickers/from-video", CreateVideoStickerAsync)
     .WithName("CreateVideoSticker");
 
+api.MapPost("/stickers/from-image", CreateImageStickerAsync)
+    .WithName("CreateImageSticker");
+
 api.MapGet("/stickers", (IMediaRepository repository) =>
     Results.Ok(repository.GetStickers().Select(StickerResponse.FromDomain)))
     .WithName("ListStickers");
@@ -192,6 +195,35 @@ static async Task<IResult> CreateVideoStickerAsync(
     IMediaRepository repository,
     StickerProcessingQueue queue,
     IOptions<StickerOptions> stickerOptions,
+    CancellationToken cancellationToken) =>
+    await CreateStickerAsync(
+        request,
+        repository,
+        queue,
+        stickerOptions,
+        requiredSourceKind: null,
+        cancellationToken);
+
+static async Task<IResult> CreateImageStickerAsync(
+    CreateVideoStickerRequest request,
+    IMediaRepository repository,
+    StickerProcessingQueue queue,
+    IOptions<StickerOptions> stickerOptions,
+    CancellationToken cancellationToken) =>
+    await CreateStickerAsync(
+        request,
+        repository,
+        queue,
+        stickerOptions,
+        MediaKind.Image,
+        cancellationToken);
+
+static async Task<IResult> CreateStickerAsync(
+    CreateVideoStickerRequest request,
+    IMediaRepository repository,
+    StickerProcessingQueue queue,
+    IOptions<StickerOptions> stickerOptions,
+    MediaKind? requiredSourceKind,
     CancellationToken cancellationToken)
 {
     var sourceMedia = repository.GetMediaFile(request.SourceMediaId);
@@ -200,12 +232,17 @@ static async Task<IResult> CreateVideoStickerAsync(
         return Results.NotFound(new ProblemResponse("Source media was not found."));
     }
 
-    if (sourceMedia.Kind != MediaKind.Video)
+    if (requiredSourceKind.HasValue && sourceMedia.Kind != requiredSourceKind.Value)
     {
-        return Results.BadRequest(new ProblemResponse("Source media must be a video."));
+        return Results.BadRequest(new ProblemResponse($"Source media must be an {requiredSourceKind.Value.ToString().ToLowerInvariant()}."));
     }
 
-    if (!HasUsablePreview(sourceMedia))
+    if (sourceMedia.Kind is not (MediaKind.Video or MediaKind.Image))
+    {
+        return Results.BadRequest(new ProblemResponse("Source media must be a video or image."));
+    }
+
+    if (sourceMedia.Kind == MediaKind.Video && !HasUsablePreview(sourceMedia))
     {
         return Results.BadRequest(new ProblemResponse("Source video preview metadata is unavailable. Check FFprobe and upload the file again."));
     }
@@ -230,7 +267,7 @@ static async Task<IResult> CreateVideoStickerAsync(
         return Results.BadRequest(new ProblemResponse($"Sticker can be at most {stickerOptions.Value.MaxDurationMs} ms."));
     }
 
-    if (IsOutsideMediaDuration(request.TrimEndMs, sourceMedia))
+    if (sourceMedia.Kind == MediaKind.Video && IsOutsideMediaDuration(request.TrimEndMs, sourceMedia))
     {
         return Results.BadRequest(new ProblemResponse("Video trim range exceeds the source video duration."));
     }
@@ -289,6 +326,11 @@ static async Task<IResult> CreateVideoStickerAsync(
     }
     else if (request.AudioMode == StickerAudioMode.KeepOriginal)
     {
+        if (sourceMedia.Kind == MediaKind.Image)
+        {
+            return Results.BadRequest(new ProblemResponse("Image source media does not contain original audio. Use Mute or choose another audio source."));
+        }
+
         if (!sourceMedia.Preview!.HasAudio)
         {
             return Results.BadRequest(new ProblemResponse("Source video does not contain an audio stream. Use Mute or choose another audio source."));

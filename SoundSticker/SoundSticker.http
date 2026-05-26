@@ -45,6 +45,21 @@ Content-Type: application/json
 
 ###
 
+POST {{SoundSticker_HostAddress}}/api/stickers/from-image
+Content-Type: application/json
+
+{
+  "sourceMediaId": "{{MediaId}}",
+  "trimStartMs": 0,
+  "trimEndMs": 5000,
+  "audioMode": "UseMedia",
+  "audioSourceMediaId": "{{AudioMediaId}}",
+  "audioTrimStartMs": 0,
+  "audioTrimEndMs": 5000
+}
+
+###
+
 GET {{SoundSticker_HostAddress}}/api/stickers/{{StickerId}}/status
 Accept: application/json
 
