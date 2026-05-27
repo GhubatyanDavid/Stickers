@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -9,6 +10,7 @@ using SoundSticker.Options;
 using SoundSticker.Persistence;
 using SoundSticker.Processing;
 using SoundSticker.Storage;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,6 +51,42 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.ForwardedHeaders =
         ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
 });
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            GetClientIp(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromSeconds(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy("uploads", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            GetClientIp(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 3,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy("sticker-creation", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            GetClientIp(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+});
 
 var persistenceOptions = builder.Configuration
     .GetSection(PersistenceOptions.SectionName)
@@ -84,6 +122,7 @@ var app = builder.Build();
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseCors();
+app.UseRateLimiter();
 
 var storageOptions = app.Services.GetRequiredService<IOptions<StorageOptions>>().Value;
 var storageRootPath = storageOptions.GetResolvedRootPath(app.Environment.ContentRootPath);
@@ -117,6 +156,7 @@ var api = app.MapGroup("/api");
 
 api.MapPost("/uploads", UploadMediaAsync)
     .DisableAntiforgery()
+    .RequireRateLimiting("uploads")
     .WithName("UploadMedia");
 
 api.MapGet("/media", (IMediaRepository repository) =>
@@ -147,9 +187,11 @@ api.MapGet("/media/{id:guid}/file", (Guid id, IMediaRepository repository, IOpti
 .WithName("GetMediaFileRaw");
 
 api.MapPost("/stickers/from-video", CreateVideoStickerAsync)
+    .RequireRateLimiting("sticker-creation")
     .WithName("CreateVideoSticker");
 
 api.MapPost("/stickers/from-image", CreateImageStickerAsync)
+    .RequireRateLimiting("sticker-creation")
     .WithName("CreateImageSticker");
 
 api.MapGet("/stickers", (IMediaRepository repository) =>
@@ -178,6 +220,9 @@ api.MapDelete("/stickers/{id:guid}", DeleteSticker)
     .WithName("DeleteSticker");
 
 app.Run();
+
+static string GetClientIp(HttpContext context) =>
+    context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
 static async Task<IResult> UploadMediaAsync(
     IFormFile file,
