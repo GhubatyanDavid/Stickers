@@ -71,6 +71,7 @@ builder.Services.AddSingleton<StickerProcessingQueue>();
 builder.Services.AddSingleton<IMediaPreviewAnalyzer, FfmpegMediaPreviewAnalyzer>();
 builder.Services.AddSingleton<IStickerProcessor, FfmpegStickerProcessor>();
 builder.Services.AddHostedService<StickerProcessingWorker>();
+builder.Services.AddHostedService<TempFileCleanupService>();
 
 var app = builder.Build();
 
@@ -79,6 +80,10 @@ app.UseCors();
 var storageOptions = app.Services.GetRequiredService<IOptions<StorageOptions>>().Value;
 var storageRootPath = storageOptions.GetResolvedRootPath(app.Environment.ContentRootPath);
 Directory.CreateDirectory(storageRootPath);
+Directory.CreateDirectory(Path.Combine(storageRootPath, storageOptions.OriginalsPath));
+Directory.CreateDirectory(Path.Combine(storageRootPath, storageOptions.StickersPath));
+Directory.CreateDirectory(Path.Combine(storageRootPath, storageOptions.PreviewsPath));
+Directory.CreateDirectory(Path.Combine(storageRootPath, storageOptions.TempPath));
 
 if (persistenceOptions is { IsPostgreSql: true, AutoCreateSchema: true })
 {
@@ -436,7 +441,7 @@ static void DeleteStickerOutputFile(Sticker sticker, StorageOptions storageOptio
     var fullPath = Path.GetFullPath(Path.Combine(storageRoot, sticker.OutputRelativePath));
     var fullStorageRoot = Path.GetFullPath(storageRoot);
 
-    if (!fullPath.StartsWith(fullStorageRoot, StringComparison.OrdinalIgnoreCase))
+    if (!IsInsideDirectory(fullPath, fullStorageRoot))
     {
         return;
     }
@@ -445,4 +450,10 @@ static void DeleteStickerOutputFile(Sticker sticker, StorageOptions storageOptio
     {
         File.Delete(fullPath);
     }
+}
+
+static bool IsInsideDirectory(string path, string directory)
+{
+    var normalizedDirectory = Path.TrimEndingDirectorySeparator(directory) + Path.DirectorySeparatorChar;
+    return path.StartsWith(normalizedDirectory, StringComparison.OrdinalIgnoreCase);
 }
