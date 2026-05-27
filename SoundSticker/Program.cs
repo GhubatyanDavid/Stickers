@@ -85,11 +85,10 @@ if (persistenceOptions is { IsPostgreSql: true, AutoCreateSchema: true })
     await app.Services.GetRequiredService<PostgreSqlSchemaInitializer>().InitializeAsync();
 }
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+
+app.UseSwagger();
+app.UseSwaggerUI();
+
 
 app.UseExceptionHandler();
 app.UseStaticFiles(new StaticFileOptions
@@ -190,7 +189,7 @@ static async Task<IResult> UploadMediaAsync(
     var fileName = file.FileName ?? "file.jpg";
 
     var mediaKind = MediaKindDetector.From(fileName, contentType);
-    
+
     if (mediaKind == MediaKind.Unknown)
     {
         if (contentType.StartsWith("image/") || fileName.EndsWith(".jpg") || fileName.EndsWith(".jpeg") || fileName.EndsWith(".png"))
