@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -43,6 +44,11 @@ builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(Stor
 builder.Services.Configure<StickerOptions>(builder.Configuration.GetSection(StickerOptions.SectionName));
 builder.Services.Configure<FfmpegOptions>(builder.Configuration.GetSection(FfmpegOptions.SectionName));
 builder.Services.Configure<PersistenceOptions>(builder.Configuration.GetSection(PersistenceOptions.SectionName));
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+});
 
 var persistenceOptions = builder.Configuration
     .GetSection(PersistenceOptions.SectionName)
@@ -75,6 +81,8 @@ builder.Services.AddHostedService<TempFileCleanupService>();
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
+app.UseHttpsRedirection();
 app.UseCors();
 
 var storageOptions = app.Services.GetRequiredService<IOptions<StorageOptions>>().Value;
