@@ -25,7 +25,7 @@ or video file.
 
 ## Stack
 
-- ASP.NET Core on .NET 10
+- ASP.NET Core on .NET 8
 - Minimal APIs
 - Swashbuckle Swagger UI
 - FFmpeg media processing
@@ -50,7 +50,7 @@ Stickers/
 
 Requirements:
 
-- .NET 10 SDK
+- .NET 8 SDK
 - PostgreSQL database for media and sticker metadata
 - FFmpeg available in `PATH`, or an explicit `Ffmpeg:ExecutablePath`
 - FFprobe available in `PATH`, or an explicit `Ffmpeg:ProbeExecutablePath` for
