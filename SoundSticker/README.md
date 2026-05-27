@@ -7,6 +7,7 @@ ASP.NET Core backend for the sound sticker MVP.
 - Upload local media files.
 - Return preview metadata for timeline controls after upload.
 - Store uploaded media under `storage/originals`.
+- Store media and sticker metadata in PostgreSQL.
 - Create a moving video sticker job from an uploaded video.
 - Create an image sticker job from an uploaded image by looping it into MP4.
 - Keep original video audio, mute it, or use audio from another uploaded audio/video file.
@@ -17,6 +18,24 @@ ASP.NET Core backend for the sound sticker MVP.
 - Serve local media files from `/media`.
 
 ## Run locally
+
+Configure PostgreSQL first:
+
+```json
+{
+  "Persistence": {
+    "Provider": "PostgreSql",
+    "ConnectionStringName": "Postgres",
+    "AutoCreateSchema": true
+  },
+  "ConnectionStrings": {
+    "Postgres": "Host=localhost;Port=5432;Database=soundsticker;Username=postgres;Password=postgres"
+  }
+}
+```
+
+The API creates the `media_files` and `stickers` tables on startup when
+`AutoCreateSchema` is true.
 
 ```powershell
 dotnet run --project SoundSticker/SoundSticker.csproj --launch-profile http

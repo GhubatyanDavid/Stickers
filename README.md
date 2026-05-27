@@ -29,7 +29,7 @@ or video file.
 - Minimal APIs
 - Swashbuckle Swagger UI
 - FFmpeg media processing
-- In-memory metadata repository for the current MVP
+- PostgreSQL metadata persistence through Npgsql
 
 ## Project Layout
 
@@ -51,6 +51,7 @@ Stickers/
 Requirements:
 
 - .NET 10 SDK
+- PostgreSQL database for media and sticker metadata
 - FFmpeg available in `PATH`, or an explicit `Ffmpeg:ExecutablePath`
 - FFprobe available in `PATH`, or an explicit `Ffmpeg:ProbeExecutablePath` for
   preview duration metadata
@@ -78,6 +79,23 @@ If FFmpeg is not available in `PATH`, configure it in app settings:
   }
 }
 ```
+
+Configure PostgreSQL in app settings or environment variables:
+
+```json
+{
+  "Persistence": {
+    "Provider": "PostgreSql",
+    "ConnectionStringName": "Postgres",
+    "AutoCreateSchema": true
+  },
+  "ConnectionStrings": {
+    "Postgres": "Host=localhost;Port=5432;Database=soundsticker;Username=postgres;Password=postgres"
+  }
+}
+```
+
+Set `Persistence:Provider` to `InMemory` only for temporary local testing.
 
 ## API Surface
 
@@ -187,9 +205,9 @@ selected audio clip is shorter, the rest of the sticker stays silent.
 ## Current MVP Notes
 
 - Uploaded files and generated stickers are stored on disk.
-- Deleting a sticker removes its in-memory job record and generated MP4 file
+- Media and sticker metadata are stored in PostgreSQL.
+- On startup the API can create the required `media_files` and `stickers`
+  tables when `Persistence:AutoCreateSchema` is enabled.
+- Deleting a sticker removes its database job record and generated MP4 file
   when one exists.
-- Media and sticker metadata are currently kept in memory.
-- Restarting the API clears the metadata lists even when stored files still
-  exist locally.
 - Sticker export currently produces MP4 video output.

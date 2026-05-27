@@ -85,6 +85,43 @@ public sealed class Sticker
             StickerStatus.Queued,
             DateTimeOffset.UtcNow);
 
+    internal static Sticker Restore(
+        Guid id,
+        Guid sourceMediaId,
+        Guid? coverImageId,
+        Guid? audioSourceMediaId,
+        StickerAudioMode audioMode,
+        int trimStartMs,
+        int trimEndMs,
+        int audioTrimStartMs,
+        int audioTrimEndMs,
+        StickerStatus status,
+        string? outputRelativePath,
+        string? outputUrl,
+        string? errorMessage,
+        DateTimeOffset createdAt,
+        DateTimeOffset? completedAt)
+    {
+        var sticker = new Sticker(
+            id,
+            sourceMediaId,
+            coverImageId,
+            audioSourceMediaId,
+            audioMode,
+            trimStartMs,
+            trimEndMs,
+            audioTrimStartMs,
+            audioTrimEndMs,
+            status,
+            createdAt);
+
+        sticker.OutputRelativePath = outputRelativePath;
+        sticker.OutputUrl = outputUrl;
+        sticker.ErrorMessage = errorMessage;
+        sticker.CompletedAt = completedAt;
+        return sticker;
+    }
+
     public void MarkProcessing()
     {
         Status = StickerStatus.Processing;

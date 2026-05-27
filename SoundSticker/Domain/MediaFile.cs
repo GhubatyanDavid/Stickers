@@ -58,6 +58,31 @@ public sealed class MediaFile
             publicUrl,
             DateTimeOffset.UtcNow);
 
+    internal static MediaFile Restore(
+        Guid id,
+        string originalFileName,
+        MediaKind kind,
+        string contentType,
+        long sizeBytes,
+        string relativePath,
+        string publicUrl,
+        MediaPreview? preview,
+        DateTimeOffset createdAt)
+    {
+        var mediaFile = new MediaFile(
+            id,
+            originalFileName,
+            kind,
+            contentType,
+            sizeBytes,
+            relativePath,
+            publicUrl,
+            createdAt);
+
+        mediaFile.Preview = preview;
+        return mediaFile;
+    }
+
     public void SetPreview(MediaPreview preview)
     {
         Preview = preview;

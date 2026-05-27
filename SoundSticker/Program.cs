@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
+using Npgsql;
 using SoundSticker.Contracts;
 using SoundSticker.Domain;
 using SoundSticker.Options;
@@ -36,7 +37,30 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
 builder.Services.Configure<StickerOptions>(builder.Configuration.GetSection(StickerOptions.SectionName));
 builder.Services.Configure<FfmpegOptions>(builder.Configuration.GetSection(FfmpegOptions.SectionName));
-builder.Services.AddSingleton<IMediaRepository, InMemoryMediaRepository>();
+builder.Services.Configure<PersistenceOptions>(builder.Configuration.GetSection(PersistenceOptions.SectionName));
+
+var persistenceOptions = builder.Configuration
+    .GetSection(PersistenceOptions.SectionName)
+    .Get<PersistenceOptions>() ?? new PersistenceOptions();
+
+if (persistenceOptions.IsPostgreSql)
+{
+    var connectionString = builder.Configuration.GetConnectionString(persistenceOptions.ConnectionStringName);
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException(
+            $"PostgreSQL persistence is enabled, but ConnectionStrings:{persistenceOptions.ConnectionStringName} is missing.");
+    }
+
+    builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
+    builder.Services.AddSingleton<PostgreSqlSchemaInitializer>();
+    builder.Services.AddSingleton<IMediaRepository, PostgreSqlMediaRepository>();
+}
+else
+{
+    builder.Services.AddSingleton<IMediaRepository, InMemoryMediaRepository>();
+}
+
 builder.Services.AddSingleton<ILocalFileStorage, LocalFileStorage>();
 builder.Services.AddSingleton<StickerProcessingQueue>();
 builder.Services.AddSingleton<IMediaPreviewAnalyzer, FfmpegMediaPreviewAnalyzer>();
@@ -50,6 +74,11 @@ app.UseCors();
 var storageOptions = app.Services.GetRequiredService<IOptions<StorageOptions>>().Value;
 var storageRootPath = storageOptions.GetResolvedRootPath(app.Environment.ContentRootPath);
 Directory.CreateDirectory(storageRootPath);
+
+if (persistenceOptions is { IsPostgreSql: true, AutoCreateSchema: true })
+{
+    await app.Services.GetRequiredService<PostgreSqlSchemaInitializer>().InitializeAsync();
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -185,6 +214,7 @@ static async Task<IResult> UploadMediaAsync(
     if (preview is not null)
     {
         mediaFile.SetPreview(preview);
+        repository.UpdateMediaFile(mediaFile);
     }
 
     return Results.Created($"/api/media/{mediaFile.Id}", MediaFileResponse.FromDomain(mediaFile));

@@ -1,0 +1,55 @@
+using Npgsql;
+
+namespace SoundSticker.Persistence;
+
+public sealed class PostgreSqlSchemaInitializer(
+    NpgsqlDataSource dataSource,
+    ILogger<PostgreSqlSchemaInitializer> logger)
+{
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        await using var command = dataSource.CreateCommand("""
+            CREATE TABLE IF NOT EXISTS media_files (
+                id uuid PRIMARY KEY,
+                original_file_name text NOT NULL,
+                kind integer NOT NULL,
+                content_type text NOT NULL,
+                size_bytes bigint NOT NULL,
+                relative_path text NOT NULL,
+                public_url text NOT NULL,
+                preview_exists boolean NOT NULL DEFAULT false,
+                preview_duration_ms bigint NULL,
+                preview_width integer NULL,
+                preview_height integer NULL,
+                preview_has_audio boolean NOT NULL DEFAULT false,
+                preview_thumbnail_url text NULL,
+                created_at timestamp with time zone NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS stickers (
+                id uuid PRIMARY KEY,
+                source_media_id uuid NOT NULL REFERENCES media_files(id) ON DELETE RESTRICT,
+                cover_image_id uuid NULL REFERENCES media_files(id) ON DELETE SET NULL,
+                audio_source_media_id uuid NULL REFERENCES media_files(id) ON DELETE SET NULL,
+                audio_mode integer NOT NULL,
+                trim_start_ms integer NOT NULL,
+                trim_end_ms integer NOT NULL,
+                audio_trim_start_ms integer NOT NULL,
+                audio_trim_end_ms integer NOT NULL,
+                status integer NOT NULL,
+                output_relative_path text NULL,
+                output_url text NULL,
+                error_message text NULL,
+                created_at timestamp with time zone NOT NULL,
+                completed_at timestamp with time zone NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS ix_media_files_created_at ON media_files (created_at DESC);
+            CREATE INDEX IF NOT EXISTS ix_stickers_created_at ON stickers (created_at DESC);
+            CREATE INDEX IF NOT EXISTS ix_stickers_status ON stickers (status);
+            """);
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        logger.LogInformation("PostgreSQL persistence schema is ready.");
+    }
+}
