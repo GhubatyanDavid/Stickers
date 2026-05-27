@@ -121,7 +121,7 @@ var app = builder.Build();
 
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
-app.UseCors();
+app.UseCors(); 
 app.UseRateLimiter();
 
 var storageOptions = app.Services.GetRequiredService<IOptions<StorageOptions>>().Value;
