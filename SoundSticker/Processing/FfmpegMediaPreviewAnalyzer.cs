@@ -23,6 +23,12 @@ public sealed class FfmpegMediaPreviewAnalyzer(
 
         try
         {
+            logger.LogInformation(
+                "Analyzing media preview. MediaId: {MediaId}. MediaKind: {MediaKind}. RelativePath: {RelativePath}.",
+                mediaFile.Id,
+                mediaFile.Kind,
+                mediaFile.RelativePath);
+
             var storageRoot = storageOptions.Value.GetResolvedRootPath(environment.ContentRootPath);
             var sourcePath = Path.Combine(storageRoot, mediaFile.RelativePath);
             var probe = await ProbeAsync(sourcePath, cancellationToken);
@@ -31,12 +37,22 @@ public sealed class FfmpegMediaPreviewAnalyzer(
                 : null;
 
             var videoStream = probe.Streams.FirstOrDefault(stream => stream.CodecType == "video");
-            return new MediaPreview(
+            var preview = new MediaPreview(
                 ParseDurationMs(probe.Format?.Duration),
                 videoStream?.Width,
                 videoStream?.Height,
                 probe.Streams.Any(stream => stream.CodecType == "audio"),
                 thumbnailUrl);
+            logger.LogInformation(
+                "Media preview analyzed. MediaId: {MediaId}. DurationMs: {DurationMs}. Width: {Width}. Height: {Height}. HasAudio: {HasAudio}. ThumbnailUrl: {ThumbnailUrl}.",
+                mediaFile.Id,
+                preview.DurationMs,
+                preview.Width,
+                preview.Height,
+                preview.HasAudio,
+                preview.ThumbnailUrl);
+
+            return preview;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -127,7 +143,13 @@ public sealed class FfmpegMediaPreviewAnalyzer(
             return null;
         }
 
-        return $"{StorageOptions.PublicRequestPath}/{relativePath.Replace('\\', '/')}";
+        var thumbnailUrl = $"{StorageOptions.PublicRequestPath}/{relativePath.Replace('\\', '/')}";
+        logger.LogInformation(
+            "Media thumbnail created. MediaId: {MediaId}. RelativePath: {RelativePath}.",
+            mediaId,
+            relativePath);
+
+        return thumbnailUrl;
     }
 
     private static long? ParseDurationMs(string? duration)

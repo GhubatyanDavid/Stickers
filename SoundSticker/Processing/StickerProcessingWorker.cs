@@ -11,6 +11,7 @@ public sealed class StickerProcessingWorker(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        logger.LogInformation("Sticker processing worker started.");
         await EnqueueInterruptedStickersAsync(stoppingToken);
 
         await foreach (var stickerId in queue.ReadAllAsync(stoppingToken))
@@ -26,6 +27,7 @@ public sealed class StickerProcessingWorker(
             .Select(sticker => sticker.Id)
             .ToArray();
 
+        logger.LogInformation("Re-queueing {StickerCount} interrupted stickers.", stickersToResume.Length);
         foreach (var stickerId in stickersToResume)
         {
             await queue.EnqueueAsync(stickerId, cancellationToken);
@@ -44,6 +46,10 @@ public sealed class StickerProcessingWorker(
         var sourceMedia = repository.GetMediaFile(sticker.SourceMediaId);
         if (sourceMedia is null)
         {
+            logger.LogWarning(
+                "Sticker {StickerId} failed because source media {SourceMediaId} was not found.",
+                sticker.Id,
+                sticker.SourceMediaId);
             sticker.MarkFailed("Source media was not found.");
             repository.UpdateSticker(sticker);
             return;
@@ -51,6 +57,11 @@ public sealed class StickerProcessingWorker(
 
         if (sourceMedia.Kind is not (MediaKind.Video or MediaKind.Image))
         {
+            logger.LogWarning(
+                "Sticker {StickerId} failed because source media {SourceMediaId} has unsupported kind {MediaKind}.",
+                sticker.Id,
+                sourceMedia.Id,
+                sourceMedia.Kind);
             sticker.MarkFailed("Only video and image source media are supported by this processor.");
             repository.UpdateSticker(sticker);
             return;
@@ -58,6 +69,11 @@ public sealed class StickerProcessingWorker(
 
         try
         {
+            logger.LogInformation(
+                "Sticker processing started. StickerId: {StickerId}. SourceMediaId: {SourceMediaId}. SourceKind: {SourceKind}.",
+                sticker.Id,
+                sourceMedia.Id,
+                sourceMedia.Kind);
             sticker.MarkProcessing();
             repository.UpdateSticker(sticker);
 
@@ -67,6 +83,10 @@ public sealed class StickerProcessingWorker(
 
             if (sticker.AudioSourceMediaId.HasValue && audioSourceMedia is null)
             {
+                logger.LogWarning(
+                    "Sticker {StickerId} failed because audio source media {AudioSourceMediaId} was not found.",
+                    sticker.Id,
+                    sticker.AudioSourceMediaId.Value);
                 sticker.MarkFailed("Audio source media was not found.");
                 repository.UpdateSticker(sticker);
                 return;
@@ -75,6 +95,10 @@ public sealed class StickerProcessingWorker(
             var processedFile = await processor.ProcessStickerAsync(sourceMedia, audioSourceMedia, sticker, cancellationToken);
             sticker.MarkReady(processedFile.RelativePath, processedFile.PublicUrl);
             repository.UpdateSticker(sticker);
+            logger.LogInformation(
+                "Sticker processing completed. StickerId: {StickerId}. OutputRelativePath: {OutputRelativePath}.",
+                sticker.Id,
+                processedFile.RelativePath);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

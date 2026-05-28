@@ -6,7 +6,8 @@ namespace SoundSticker.FileStorage;
 
 public sealed class LocalFileStorage(
     IOptions<StorageOptions> storageOptions,
-    IWebHostEnvironment environment) : ILocalFileStorage
+    IWebHostEnvironment environment,
+    ILogger<LocalFileStorage> logger) : ILocalFileStorage
 {
     public async Task<SavedMediaFile> SaveOriginalAsync(
         IFormFile file,
@@ -27,6 +28,13 @@ public sealed class LocalFileStorage(
         await file.CopyToAsync(stream, cancellationToken);
 
         var publicUrl = $"{StorageOptions.PublicRequestPath}/{relativePath.Replace('\\', '/')}";
+        logger.LogInformation(
+            "Saved original media file {MediaFileId} to {RelativePath}. Size: {SizeBytes} bytes. Kind: {MediaKind}.",
+            id,
+            relativePath,
+            file.Length,
+            mediaKind);
+
         return new SavedMediaFile(id, relativePath, publicUrl);
     }
 

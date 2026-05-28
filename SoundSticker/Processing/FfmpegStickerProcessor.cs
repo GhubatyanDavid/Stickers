@@ -27,6 +27,12 @@ public sealed class FfmpegStickerProcessor(
         var outputFileName = $"{sticker.Id:N}.mp4";
         var outputRelativePath = Path.Combine(storageOptions.Value.StickersPath, outputFileName);
         var outputPath = Path.Combine(storageRoot, outputRelativePath);
+        logger.LogInformation(
+            "FFmpeg sticker processing command preparing. StickerId: {StickerId}. SourceMediaId: {SourceMediaId}. AudioSourceMediaId: {AudioSourceMediaId}. OutputRelativePath: {OutputRelativePath}.",
+            sticker.Id,
+            sourceMedia.Id,
+            audioSourceMedia?.Id,
+            outputRelativePath);
 
         var startInfo = new ProcessStartInfo
         {
@@ -108,6 +114,11 @@ public sealed class FfmpegStickerProcessor(
         }
 
         var publicUrl = $"{StorageOptions.PublicRequestPath}/{outputRelativePath.Replace('\\', '/')}";
+        logger.LogInformation(
+            "FFmpeg sticker processing succeeded. StickerId: {StickerId}. OutputRelativePath: {OutputRelativePath}.",
+            sticker.Id,
+            outputRelativePath);
+
         return new ProcessedStickerFile(outputRelativePath, publicUrl);
     }
 

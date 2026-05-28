@@ -101,7 +101,7 @@ if (persistenceOptions.IsPostgreSql)
             $"PostgreSQL persistence is enabled, but ConnectionStrings:{persistenceOptions.ConnectionStringName} is missing.");
     }
 
-    builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
+    builder.Services.AddSingleton(_ => BuildPostgresDataSource(connectionString));
     builder.Services.AddSingleton<PostgreSqlSchemaInitializer>();
     builder.Services.AddSingleton<IMediaRepository, PostgreSqlMediaRepository>();
 }
@@ -118,6 +118,8 @@ builder.Services.AddHostedService<StickerProcessingWorker>();
 builder.Services.AddHostedService<TempFileCleanupService>();
 
 var app = builder.Build();
+
+app.Logger.LogInformation("SoundSticker API starting. Environment: {EnvironmentName}.", app.Environment.EnvironmentName);
 
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
@@ -230,6 +232,7 @@ static async Task<IResult> UploadMediaAsync(
     IMediaRepository repository,
     IMediaPreviewAnalyzer previewAnalyzer,
     IOptions<StorageOptions> options,
+    ILogger<Program> logger,
     CancellationToken cancellationToken)
 {
     if (file == null || file.Length == 0)
@@ -247,6 +250,12 @@ static async Task<IResult> UploadMediaAsync(
     var fileName = file.FileName ?? "file.jpg";
 
     var mediaKind = MediaKindDetector.From(fileName, contentType);
+    logger.LogInformation(
+        "Upload received. FileName: {FileName}. ContentType: {ContentType}. SizeBytes: {SizeBytes}. DetectedKind: {MediaKind}.",
+        fileName,
+        contentType,
+        file.Length,
+        mediaKind);
 
     if (mediaKind == MediaKind.Unknown)
     {
@@ -261,6 +270,11 @@ static async Task<IResult> UploadMediaAsync(
     }
 
     var savedFile = await storage.SaveOriginalAsync(file, mediaKind, cancellationToken);
+    logger.LogInformation(
+        "Upload file saved. MediaFileId: {MediaFileId}. RelativePath: {RelativePath}.",
+        savedFile.Id,
+        savedFile.RelativePath);
+
     var mediaFile = MediaFile.Create(
         savedFile.Id,
         fileName,
@@ -270,13 +284,45 @@ static async Task<IResult> UploadMediaAsync(
         savedFile.RelativePath,
         savedFile.PublicUrl);
 
-    repository.AddMediaFile(mediaFile);
+    try
+    {
+        repository.AddMediaFile(mediaFile);
+        logger.LogInformation("Media metadata saved. MediaFileId: {MediaFileId}.", mediaFile.Id);
+    }
+    catch (NpgsqlException exception)
+    {
+        logger.LogError(exception, "Could not save media metadata. MediaFileId: {MediaFileId}.", mediaFile.Id);
+        DeleteStoredFile(savedFile.RelativePath, options.Value);
+        return Results.Problem(
+            title: "Database is unavailable.",
+            detail: "Could not save uploaded media metadata. Check the PostgreSQL connection settings.",
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
 
     var preview = await previewAnalyzer.AnalyzeAsync(mediaFile, cancellationToken);
     if (preview is not null)
     {
         mediaFile.SetPreview(preview);
-        repository.UpdateMediaFile(mediaFile);
+        try
+        {
+            repository.UpdateMediaFile(mediaFile);
+            logger.LogInformation(
+                "Media preview metadata saved. MediaFileId: {MediaFileId}. DurationMs: {DurationMs}. Width: {Width}. Height: {Height}. HasAudio: {HasAudio}.",
+                mediaFile.Id,
+                preview.DurationMs,
+                preview.Width,
+                preview.Height,
+                preview.HasAudio);
+        }
+        catch (NpgsqlException exception)
+        {
+            logger.LogWarning(exception, "Could not save media preview metadata. MediaFileId: {MediaFileId}.", mediaFile.Id);
+            return Results.Created($"/api/media/{mediaFile.Id}", MediaFileResponse.FromDomain(mediaFile));
+        }
+    }
+    else
+    {
+        logger.LogInformation("No preview metadata generated for media {MediaFileId}.", mediaFile.Id);
     }
 
     return Results.Created($"/api/media/{mediaFile.Id}", MediaFileResponse.FromDomain(mediaFile));
@@ -287,12 +333,14 @@ static async Task<IResult> CreateVideoStickerAsync(
     IMediaRepository repository,
     StickerProcessingQueue queue,
     IOptions<StickerOptions> stickerOptions,
+    ILogger<Program> logger,
     CancellationToken cancellationToken) =>
     await CreateStickerAsync(
         request,
         repository,
         queue,
         stickerOptions,
+        logger,
         requiredSourceKind: null,
         cancellationToken);
 
@@ -301,12 +349,14 @@ static async Task<IResult> CreateImageStickerAsync(
     IMediaRepository repository,
     StickerProcessingQueue queue,
     IOptions<StickerOptions> stickerOptions,
+    ILogger<Program> logger,
     CancellationToken cancellationToken) =>
     await CreateStickerAsync(
         request,
         repository,
         queue,
         stickerOptions,
+        logger,
         MediaKind.Image,
         cancellationToken);
 
@@ -315,9 +365,19 @@ static async Task<IResult> CreateStickerAsync(
     IMediaRepository repository,
     StickerProcessingQueue queue,
     IOptions<StickerOptions> stickerOptions,
+    ILogger logger,
     MediaKind? requiredSourceKind,
     CancellationToken cancellationToken)
 {
+    logger.LogInformation(
+        "Sticker creation requested. SourceMediaId: {SourceMediaId}. CoverImageId: {CoverImageId}. AudioSourceMediaId: {AudioSourceMediaId}. AudioMode: {AudioMode}. TrimStartMs: {TrimStartMs}. TrimEndMs: {TrimEndMs}.",
+        request.SourceMediaId,
+        request.CoverImageId,
+        request.AudioSourceMediaId,
+        request.AudioMode,
+        request.TrimStartMs,
+        request.TrimEndMs);
+
     var sourceMedia = repository.GetMediaFile(request.SourceMediaId);
     if (sourceMedia is null)
     {
@@ -447,6 +507,10 @@ static async Task<IResult> CreateStickerAsync(
 
     repository.AddSticker(sticker);
     await queue.EnqueueAsync(sticker.Id, cancellationToken);
+    logger.LogInformation(
+        "Sticker queued. StickerId: {StickerId}. SourceMediaId: {SourceMediaId}.",
+        sticker.Id,
+        sticker.SourceMediaId);
 
     return Results.Accepted($"/api/stickers/{sticker.Id}", StickerResponse.FromDomain(sticker));
 }
@@ -460,8 +524,11 @@ static bool IsOutsideMediaDuration(int trimEndMs, MediaFile mediaFile) =>
 static IResult DeleteSticker(
     Guid id,
     IMediaRepository repository,
-    IOptions<StorageOptions> storageOptions)
+    IOptions<StorageOptions> storageOptions,
+    ILogger<Program> logger)
 {
+    logger.LogInformation("Sticker delete requested. StickerId: {StickerId}.", id);
+
     var existingSticker = repository.GetSticker(id);
     if (existingSticker is null)
     {
@@ -480,8 +547,26 @@ static IResult DeleteSticker(
     }
 
     DeleteStickerOutputFile(removedSticker, storageOptions.Value);
+    logger.LogInformation("Sticker deleted. StickerId: {StickerId}.", id);
     return Results.NoContent();
 }
+
+static NpgsqlDataSource BuildPostgresDataSource(string connectionString)
+{
+    var csb = new NpgsqlConnectionStringBuilder(connectionString)
+    {
+        Pooling = false,
+        Timeout = 5,
+        CommandTimeout = 5
+    };
+
+    var builder = new NpgsqlDataSourceBuilder(csb.ConnectionString);
+
+    return builder.Build();
+}
+
+static int GetShortTimeout(int configuredTimeout) =>
+    configuredTimeout <= 0 ? 5 : Math.Min(configuredTimeout, 5);
 
 static void DeleteStickerOutputFile(Sticker sticker, StorageOptions storageOptions)
 {
@@ -490,8 +575,13 @@ static void DeleteStickerOutputFile(Sticker sticker, StorageOptions storageOptio
         return;
     }
 
+    DeleteStoredFile(sticker.OutputRelativePath, storageOptions);
+}
+
+static void DeleteStoredFile(string relativePath, StorageOptions storageOptions)
+{
     var storageRoot = storageOptions.GetResolvedRootPath(Directory.GetCurrentDirectory());
-    var fullPath = Path.GetFullPath(Path.Combine(storageRoot, sticker.OutputRelativePath));
+    var fullPath = Path.GetFullPath(Path.Combine(storageRoot, relativePath));
     var fullStorageRoot = Path.GetFullPath(storageRoot);
 
     if (!IsInsideDirectory(fullPath, fullStorageRoot))

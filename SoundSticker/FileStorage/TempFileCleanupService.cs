@@ -25,18 +25,30 @@ public sealed class TempFileCleanupService(
         Directory.CreateDirectory(tempDirectory);
 
         var threshold = DateTimeOffset.UtcNow.AddHours(-GetMaxAgeHours());
+        var scannedFiles = 0;
+        var deletedFiles = 0;
 
         foreach (var file in Directory.EnumerateFiles(tempDirectory, "*", SearchOption.AllDirectories))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            DeleteIfExpired(file, threshold);
+            scannedFiles++;
+            if (DeleteIfExpired(file, threshold))
+            {
+                deletedFiles++;
+            }
         }
 
         DeleteEmptyDirectories(tempDirectory, cancellationToken);
+        logger.LogInformation(
+            "Temp cleanup completed. Directory: {TempDirectory}. Scanned files: {ScannedFiles}. Deleted files: {DeletedFiles}.",
+            tempDirectory,
+            scannedFiles,
+            deletedFiles);
+
         return Task.CompletedTask;
     }
 
-    private void DeleteIfExpired(string file, DateTimeOffset threshold)
+    private bool DeleteIfExpired(string file, DateTimeOffset threshold)
     {
         try
         {
@@ -46,15 +58,17 @@ public sealed class TempFileCleanupService(
 
             if (fileTime >= threshold.UtcDateTime)
             {
-                return;
+                return false;
             }
 
             File.Delete(file);
             logger.LogInformation("Deleted expired temp file {FilePath}.", file);
+            return true;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             logger.LogWarning(exception, "Could not delete temp file {FilePath}.", file);
+            return false;
         }
     }
 
