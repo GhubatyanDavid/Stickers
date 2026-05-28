@@ -2,7 +2,7 @@ using Microsoft.Extensions.Options;
 using SoundSticker.Domain;
 using SoundSticker.Options;
 
-namespace SoundSticker.Storage;
+namespace SoundSticker.FileStorage;
 
 public sealed class LocalFileStorage(
     IOptions<StorageOptions> storageOptions,

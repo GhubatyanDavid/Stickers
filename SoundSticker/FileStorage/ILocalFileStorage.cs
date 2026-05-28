@@ -1,6 +1,6 @@
 using SoundSticker.Domain;
 
-namespace SoundSticker.Storage;
+namespace SoundSticker.FileStorage;
 
 public interface ILocalFileStorage
 {

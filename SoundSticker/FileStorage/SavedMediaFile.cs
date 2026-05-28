@@ -1,4 +1,4 @@
-namespace SoundSticker.Storage;
+namespace SoundSticker.FileStorage;
 
 public sealed record SavedMediaFile(
     Guid Id,
