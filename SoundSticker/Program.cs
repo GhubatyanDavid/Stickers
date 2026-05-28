@@ -9,7 +9,7 @@ using SoundSticker.Domain;
 using SoundSticker.Options;
 using SoundSticker.Persistence;
 using SoundSticker.Processing;
-using SoundSticker.Storage;
+using SoundSticker.FileStorage;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
