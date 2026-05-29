@@ -1,5 +1,6 @@
 using SoundSticker.Domain;
 using SoundSticker.Persistence;
+using Npgsql;
 
 namespace SoundSticker.Processing;
 
@@ -12,7 +13,16 @@ public sealed class StickerProcessingWorker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Sticker processing worker started.");
-        await EnqueueInterruptedStickersAsync(stoppingToken);
+        try
+        {
+            await EnqueueInterruptedStickersAsync(stoppingToken);
+        }
+        catch (NpgsqlException exception)
+        {
+            logger.LogError(
+                "Could not re-queue interrupted stickers because PostgreSQL is unavailable. Message: {MessageText}",
+                exception.Message);
+        }
 
         await foreach (var stickerId in queue.ReadAllAsync(stoppingToken))
         {
@@ -36,39 +46,39 @@ public sealed class StickerProcessingWorker(
 
     private async Task ProcessStickerAsync(Guid stickerId, CancellationToken cancellationToken)
     {
-        var sticker = repository.GetSticker(stickerId);
-        if (sticker is null)
-        {
-            logger.LogWarning("Queued sticker {StickerId} was not found.", stickerId);
-            return;
-        }
-
-        var sourceMedia = repository.GetMediaFile(sticker.SourceMediaId);
-        if (sourceMedia is null)
-        {
-            logger.LogWarning(
-                "Sticker {StickerId} failed because source media {SourceMediaId} was not found.",
-                sticker.Id,
-                sticker.SourceMediaId);
-            sticker.MarkFailed("Source media was not found.");
-            repository.UpdateSticker(sticker);
-            return;
-        }
-
-        if (sourceMedia.Kind is not (MediaKind.Video or MediaKind.Image))
-        {
-            logger.LogWarning(
-                "Sticker {StickerId} failed because source media {SourceMediaId} has unsupported kind {MediaKind}.",
-                sticker.Id,
-                sourceMedia.Id,
-                sourceMedia.Kind);
-            sticker.MarkFailed("Only video and image source media are supported by this processor.");
-            repository.UpdateSticker(sticker);
-            return;
-        }
-
         try
         {
+            var sticker = repository.GetSticker(stickerId);
+            if (sticker is null)
+            {
+                logger.LogWarning("Queued sticker {StickerId} was not found.", stickerId);
+                return;
+            }
+
+            var sourceMedia = repository.GetMediaFile(sticker.SourceMediaId);
+            if (sourceMedia is null)
+            {
+                logger.LogWarning(
+                    "Sticker {StickerId} failed because source media {SourceMediaId} was not found.",
+                    sticker.Id,
+                    sticker.SourceMediaId);
+                sticker.MarkFailed("Source media was not found.");
+                repository.UpdateSticker(sticker);
+                return;
+            }
+
+            if (sourceMedia.Kind is not (MediaKind.Video or MediaKind.Image))
+            {
+                logger.LogWarning(
+                    "Sticker {StickerId} failed because source media {SourceMediaId} has unsupported kind {MediaKind}.",
+                    sticker.Id,
+                    sourceMedia.Id,
+                    sourceMedia.Kind);
+                sticker.MarkFailed("Only video and image source media are supported by this processor.");
+                repository.UpdateSticker(sticker);
+                return;
+            }
+
             logger.LogInformation(
                 "Sticker processing started. StickerId: {StickerId}. SourceMediaId: {SourceMediaId}. SourceKind: {SourceKind}.",
                 sticker.Id,
@@ -104,11 +114,33 @@ public sealed class StickerProcessingWorker(
         {
             throw;
         }
+        catch (NpgsqlException exception)
+        {
+            logger.LogError(
+                "Sticker {StickerId} could not be processed because PostgreSQL is unavailable. Message: {MessageText}",
+                stickerId,
+                exception.Message);
+        }
         catch (Exception exception)
         {
-            logger.LogError(exception, "Sticker {StickerId} failed during processing.", sticker.Id);
-            sticker.MarkFailed(exception.Message);
-            repository.UpdateSticker(sticker);
+            logger.LogError(exception, "Sticker {StickerId} failed during processing.", stickerId);
+
+            try
+            {
+                var sticker = repository.GetSticker(stickerId);
+                if (sticker is not null)
+                {
+                    sticker.MarkFailed(exception.Message);
+                    repository.UpdateSticker(sticker);
+                }
+            }
+            catch (NpgsqlException dbException)
+            {
+                logger.LogError(
+                    "Could not mark sticker {StickerId} as failed because PostgreSQL is unavailable. Message: {MessageText}",
+                    stickerId,
+                    dbException.Message);
+            }
         }
     }
 }

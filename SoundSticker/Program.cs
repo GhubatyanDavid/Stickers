@@ -98,6 +98,7 @@ if (persistenceOptions.IsPostgreSql)
     }
 
     builder.Services.AddSingleton(_ => BuildPostgresDataSource(connectionString));
+    builder.Services.AddSingleton(_ => GetPostgresConnectionInfo(connectionString));
     builder.Services.AddSingleton<PostgreSqlSchemaInitializer>();
     builder.Services.AddSingleton<IMediaRepository, PostgreSqlMediaRepository>();
 }
@@ -116,6 +117,17 @@ builder.Services.AddHostedService<TempFileCleanupService>();
 var app = builder.Build();
 
 app.Logger.LogInformation("SoundSticker API starting. Environment: {EnvironmentName}.", app.Environment.EnvironmentName);
+if (persistenceOptions.IsPostgreSql)
+{
+    var connectionInfo = app.Services.GetRequiredService<PostgresConnectionInfo>();
+    app.Logger.LogInformation(
+        "PostgreSQL config in use. Host: {Host}. Port: {Port}. Database: {Database}. Username: {Username}. ConnectionStringName: {ConnectionStringName}.",
+        connectionInfo.Host,
+        connectionInfo.Port,
+        connectionInfo.Database,
+        connectionInfo.Username,
+        persistenceOptions.ConnectionStringName);
+}
 
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
@@ -132,7 +144,17 @@ Directory.CreateDirectory(Path.Combine(storageRootPath, storageOptions.TempPath)
 
 if (persistenceOptions is { IsPostgreSql: true, AutoCreateSchema: true })
 {
-    await app.Services.GetRequiredService<PostgreSqlSchemaInitializer>().InitializeAsync();
+    try
+    {
+        await app.Services.GetRequiredService<PostgreSqlSchemaInitializer>().InitializeAsync();
+    }
+    catch (NpgsqlException exception)
+    {
+        app.Logger.LogCritical(
+            "PostgreSQL schema initialization failed. SqlState: {SqlState}. Message: {MessageText}",
+            TryGetSqlState(exception),
+            exception.Message);
+    }
 }
 
 
@@ -141,6 +163,30 @@ app.UseSwaggerUI();
 
 
 app.UseExceptionHandler();
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next(context);
+    }
+    catch (NpgsqlException exception)
+    {
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        logger.LogError(
+            "PostgreSQL request failed. Path: {Path}. Method: {Method}. SqlState: {SqlState}. Message: {MessageText}",
+            context.Request.Path,
+            context.Request.Method,
+            TryGetSqlState(exception),
+            exception.Message);
+
+        if (!context.Response.HasStarted)
+        {
+            context.Response.Clear();
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await context.Response.WriteAsJsonAsync(new ProblemResponse("Database is unavailable. Check PostgreSQL connection settings."));
+        }
+    }
+});
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(storageRootPath),
@@ -222,6 +268,9 @@ app.Run();
 static string GetClientIp(HttpContext context) =>
     context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
+static string? TryGetSqlState(NpgsqlException exception) =>
+    exception is PostgresException postgresException ? postgresException.SqlState : null;
+
 static async Task<IResult> UploadMediaAsync(
     IFormFile file,
     ILocalFileStorage storage,
@@ -287,7 +336,11 @@ static async Task<IResult> UploadMediaAsync(
     }
     catch (NpgsqlException exception)
     {
-        logger.LogError(exception, "Could not save media metadata. MediaFileId: {MediaFileId}.", mediaFile.Id);
+        logger.LogError(
+            "Could not save media metadata. MediaFileId: {MediaFileId}. SqlState: {SqlState}. Message: {MessageText}",
+            mediaFile.Id,
+            TryGetSqlState(exception),
+            exception.Message);
         DeleteStoredFile(savedFile.RelativePath, options.Value);
         return Results.Problem(
             title: "Database is unavailable.",
@@ -312,7 +365,11 @@ static async Task<IResult> UploadMediaAsync(
         }
         catch (NpgsqlException exception)
         {
-            logger.LogWarning(exception, "Could not save media preview metadata. MediaFileId: {MediaFileId}.", mediaFile.Id);
+            logger.LogWarning(
+                "Could not save media preview metadata. MediaFileId: {MediaFileId}. SqlState: {SqlState}. Message: {MessageText}",
+                mediaFile.Id,
+                TryGetSqlState(exception),
+                exception.Message);
             return Results.Created($"/api/media/{mediaFile.Id}", MediaFileResponse.FromDomain(mediaFile));
         }
     }
@@ -561,8 +618,15 @@ static NpgsqlDataSource BuildPostgresDataSource(string connectionString)
     return builder.Build();
 }
 
-static int GetShortTimeout(int configuredTimeout) =>
-    configuredTimeout <= 0 ? 5 : Math.Min(configuredTimeout, 5);
+static PostgresConnectionInfo GetPostgresConnectionInfo(string connectionString)
+{
+    var csb = new NpgsqlConnectionStringBuilder(connectionString);
+    return new PostgresConnectionInfo(
+        csb.Host,
+        csb.Port,
+        csb.Database,
+        csb.Username);
+}
 
 static void DeleteStickerOutputFile(Sticker sticker, StorageOptions storageOptions)
 {
@@ -596,3 +660,9 @@ static bool IsInsideDirectory(string path, string directory)
     var normalizedDirectory = Path.TrimEndingDirectorySeparator(directory) + Path.DirectorySeparatorChar;
     return path.StartsWith(normalizedDirectory, StringComparison.OrdinalIgnoreCase);
 }
+
+sealed record PostgresConnectionInfo(
+    string? Host,
+    int Port,
+    string? Database,
+    string? Username);
