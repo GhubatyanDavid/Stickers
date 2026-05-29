@@ -15,32 +15,80 @@ public static class StickerEndpoints
     {
         api.MapPost("/stickers/from-video", CreateVideoStickerAsync)
             .RequireRateLimiting("sticker-creation")
-            .WithName("CreateVideoSticker");
+            .WithName("CreateVideoSticker")
+            .WithSummary("Create video sticker")
+            .WithDescription("Queues sticker processing from an uploaded video. Set isPublic=true to show it in All Stickers after processing.")
+            .Accepts<CreateVideoStickerRequest>("application/json")
+            .Produces<StickerResponse>(StatusCodes.Status202Accepted)
+            .Produces<ProblemResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized)
+            .Produces<ProblemResponse>(StatusCodes.Status404NotFound)
+            .Produces<ProblemResponse>(StatusCodes.Status429TooManyRequests);
 
         api.MapPost("/stickers/from-image", CreateImageStickerAsync)
             .RequireRateLimiting("sticker-creation")
-            .WithName("CreateImageSticker");
+            .WithName("CreateImageSticker")
+            .WithSummary("Create image sticker")
+            .WithDescription("Queues sticker processing from an uploaded image by looping it into MP4. Use Mute or UseMedia audio mode.")
+            .Accepts<CreateVideoStickerRequest>("application/json")
+            .Produces<StickerResponse>(StatusCodes.Status202Accepted)
+            .Produces<ProblemResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized)
+            .Produces<ProblemResponse>(StatusCodes.Status404NotFound)
+            .Produces<ProblemResponse>(StatusCodes.Status429TooManyRequests);
 
         api.MapGet("/stickers/my", ListMyStickers)
-            .WithName("ListMyStickers");
+            .WithName("ListMyStickers")
+            .WithSummary("List my stickers")
+            .WithDescription("Returns private and public stickers owned by the current X-User-Id.")
+            .Produces<StickerResponse[]>()
+            .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized);
 
         api.MapGet("/stickers", ListMyStickers)
-            .WithName("ListStickers");
+            .WithName("ListStickers")
+            .WithSummary("List my stickers")
+            .WithDescription("Backward-compatible alias for /api/stickers/my.")
+            .Produces<StickerResponse[]>()
+            .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized);
 
         api.MapGet("/stickers/all", ListAllStickers)
-            .WithName("ListAllStickers");
+            .WithName("ListAllStickers")
+            .WithSummary("List public stickers")
+            .WithDescription("Public endpoint. Returns ready stickers created with isPublic=true.")
+            .Produces<StickerResponse[]>();
 
         api.MapGet("/stickers/{id:guid}", GetSticker)
-            .WithName("GetSticker");
+            .WithName("GetSticker")
+            .WithSummary("Get my sticker")
+            .WithDescription("Returns one sticker if it belongs to the current X-User-Id.")
+            .Produces<StickerResponse>()
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized);
 
         api.MapGet("/stickers/{id:guid}/status", GetStickerStatus)
-            .WithName("GetStickerStatus");
+            .WithName("GetStickerStatus")
+            .WithSummary("Get my sticker status")
+            .WithDescription("Returns processing status, output URL, and error message for one sticker owned by the current X-User-Id.")
+            .Produces<StickerStatusResponse>()
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized);
 
         api.MapGet("/stickers/{id:guid}/download", DownloadSticker)
-            .WithName("DownloadSticker");
+            .WithName("DownloadSticker")
+            .WithSummary("Download my sticker MP4")
+            .WithDescription("Downloads the generated MP4 when the sticker is ready and owned by the current X-User-Id.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized)
+            .Produces<ProblemResponse>(StatusCodes.Status404NotFound)
+            .Produces<ProblemResponse>(StatusCodes.Status409Conflict);
 
         api.MapDelete("/stickers/{id:guid}", DeleteSticker)
-            .WithName("DeleteSticker");
+            .WithName("DeleteSticker")
+            .WithSummary("Delete my sticker")
+            .WithDescription("Deletes a sticker owned by the current X-User-Id. If it is processing, the job is canceled first.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized);
 
         return api;
     }

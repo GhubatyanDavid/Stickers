@@ -11,13 +11,27 @@ public static class MediaEndpoints
     public static RouteGroupBuilder MapMediaEndpoints(this RouteGroupBuilder api)
     {
         api.MapGet("/media", ListMedia)
-            .WithName("ListMedia");
+            .WithName("ListMedia")
+            .WithSummary("List my media")
+            .WithDescription("Returns uploaded media owned by the current X-User-Id.")
+            .Produces<MediaFileResponse[]>()
+            .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized);
 
         api.MapGet("/media/{id:guid}", GetMedia)
-            .WithName("GetMedia");
+            .WithName("GetMedia")
+            .WithSummary("Get my media metadata")
+            .WithDescription("Returns one uploaded media item if it belongs to the current X-User-Id.")
+            .Produces<MediaFileResponse>()
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized);
 
         api.MapGet("/media/{id:guid}/file", DownloadMediaFile)
-            .WithName("GetMediaFileRaw");
+            .WithName("GetMediaFileRaw")
+            .WithSummary("Download my original media file")
+            .WithDescription("Streams the original uploaded file if it belongs to the current X-User-Id.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized);
 
         return api;
     }

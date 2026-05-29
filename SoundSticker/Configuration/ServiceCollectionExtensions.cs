@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.OpenApi;
 using Npgsql;
 using SoundSticker.Auth;
 using SoundSticker.FileStorage;
@@ -33,7 +34,23 @@ public static class ServiceCollectionExtensions
         });
 
         builder.Services.AddEndpointsApiExplorer();
-        builder.Services.AddSwaggerGen();
+        builder.Services.AddSwaggerGen(options =>
+        {
+            options.SwaggerDoc("v1", new OpenApiInfo
+            {
+                Title = "SoundSticker API",
+                Version = "v1",
+                Description = "Backend API for uploading media and creating private or public sound stickers."
+            });
+            options.AddSecurityDefinition("UserId", new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.ApiKey,
+                In = ParameterLocation.Header,
+                Name = "X-User-Id",
+                Description = "Stable MVP user id. Generate one UUID in the frontend and send it on private endpoints."
+            });
+            options.OperationFilter<UserIdHeaderOperationFilter>();
+        });
         builder.Services.AddProblemDetails();
         builder.Services.AddHttpContextAccessor();
         builder.Services.ConfigureHttpJsonOptions(options =>

@@ -18,7 +18,15 @@ public static class UploadEndpoints
         api.MapPost("/uploads", UploadMediaAsync)
             .DisableAntiforgery()
             .RequireRateLimiting("uploads")
-            .WithName("UploadMedia");
+            .WithName("UploadMedia")
+            .WithSummary("Upload media")
+            .WithDescription("Uploads an image, GIF, audio, or video file for the current user. Send multipart/form-data with field name 'file'.")
+            .Accepts<IFormFile>("multipart/form-data")
+            .Produces<MediaFileResponse>(StatusCodes.Status201Created)
+            .Produces<ProblemResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized)
+            .Produces<ProblemResponse>(StatusCodes.Status429TooManyRequests)
+            .Produces<ProblemResponse>(StatusCodes.Status503ServiceUnavailable);
 
         return api;
     }
