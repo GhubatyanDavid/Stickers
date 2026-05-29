@@ -24,6 +24,12 @@ public sealed class InMemoryMediaRepository : IMediaRepository
     public IReadOnlyCollection<MediaFile> GetMediaFiles() =>
         _mediaFiles.Values.OrderByDescending(mediaFile => mediaFile.CreatedAt).ToArray();
 
+    public IReadOnlyCollection<MediaFile> GetMediaFilesByOwner(string ownerUserId) =>
+        _mediaFiles.Values
+            .Where(mediaFile => mediaFile.OwnerUserId == ownerUserId)
+            .OrderByDescending(mediaFile => mediaFile.CreatedAt)
+            .ToArray();
+
     public void AddSticker(Sticker sticker)
     {
         _stickers[sticker.Id] = sticker;
@@ -39,6 +45,18 @@ public sealed class InMemoryMediaRepository : IMediaRepository
 
     public IReadOnlyCollection<Sticker> GetStickers() =>
         _stickers.Values.OrderByDescending(sticker => sticker.CreatedAt).ToArray();
+
+    public IReadOnlyCollection<Sticker> GetStickersByOwner(string ownerUserId) =>
+        _stickers.Values
+            .Where(sticker => sticker.OwnerUserId == ownerUserId)
+            .OrderByDescending(sticker => sticker.CreatedAt)
+            .ToArray();
+
+    public IReadOnlyCollection<Sticker> GetPublicStickers() =>
+        _stickers.Values
+            .Where(sticker => sticker.Status == StickerStatus.Ready && sticker.IsPublic)
+            .OrderByDescending(sticker => sticker.CreatedAt)
+            .ToArray();
 
     public Sticker? RemoveSticker(Guid id) =>
         _stickers.TryRemove(id, out var sticker) ? sticker : null;

@@ -13,4 +13,6 @@ public sealed class StickerOptions
     public int MaxOutputDimension { get; set; } = 512;
 
     public string VideoPreset { get; set; } = "ultrafast";
+
+    public int WorkerCount { get; set; } = 2;
 }

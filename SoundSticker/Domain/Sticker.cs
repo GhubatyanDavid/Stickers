@@ -12,6 +12,8 @@ public sealed class Sticker
         int trimEndMs,
         int audioTrimStartMs,
         int audioTrimEndMs,
+        string ownerUserId,
+        bool isPublic,
         StickerStatus status,
         DateTimeOffset createdAt)
     {
@@ -24,6 +26,8 @@ public sealed class Sticker
         TrimEndMs = trimEndMs;
         AudioTrimStartMs = audioTrimStartMs;
         AudioTrimEndMs = audioTrimEndMs;
+        OwnerUserId = ownerUserId;
+        IsPublic = isPublic;
         Status = status;
         CreatedAt = createdAt;
     }
@@ -45,6 +49,10 @@ public sealed class Sticker
     public int AudioTrimStartMs { get; }
 
     public int AudioTrimEndMs { get; }
+
+    public string OwnerUserId { get; }
+
+    public bool IsPublic { get; private set; }
 
     public int DurationMs => TrimEndMs - TrimStartMs;
 
@@ -71,7 +79,9 @@ public sealed class Sticker
         int trimEndMs,
         int audioTrimStartMs,
         int audioTrimEndMs,
-        StickerAudioMode audioMode) =>
+        StickerAudioMode audioMode,
+        string ownerUserId,
+        bool isPublic) =>
         new(
             id,
             sourceMediaId,
@@ -82,6 +92,8 @@ public sealed class Sticker
             trimEndMs,
             audioTrimStartMs,
             audioTrimEndMs,
+            ownerUserId,
+            isPublic,
             StickerStatus.Queued,
             DateTimeOffset.UtcNow);
 
@@ -99,6 +111,8 @@ public sealed class Sticker
         string? outputRelativePath,
         string? outputUrl,
         string? errorMessage,
+        string ownerUserId,
+        bool isPublic,
         DateTimeOffset createdAt,
         DateTimeOffset? completedAt)
     {
@@ -112,6 +126,8 @@ public sealed class Sticker
             trimEndMs,
             audioTrimStartMs,
             audioTrimEndMs,
+            ownerUserId,
+            isPublic,
             status,
             createdAt);
 

@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Npgsql;
+using SoundSticker.Auth;
 using SoundSticker.FileStorage;
 using SoundSticker.Infrastructure;
 using SoundSticker.Options;
@@ -34,6 +35,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
         builder.Services.AddProblemDetails();
+        builder.Services.AddHttpContextAccessor();
         builder.Services.ConfigureHttpJsonOptions(options =>
         {
             options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -57,6 +59,7 @@ public static class ServiceCollectionExtensions
 
         builder.Services.AddPersistence(builder.Configuration, persistenceOptions);
         builder.Services.AddStorageAndProcessing();
+        builder.Services.AddScoped<ICurrentUser, HeaderCurrentUser>();
 
         return persistenceOptions;
     }

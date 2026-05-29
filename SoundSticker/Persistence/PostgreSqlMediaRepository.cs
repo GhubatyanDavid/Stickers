@@ -20,6 +20,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
         preview_height,
         preview_has_audio,
         preview_thumbnail_url,
+        owner_user_id,
         created_at
         """;
 
@@ -37,6 +38,8 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
         output_relative_path,
         output_url,
         error_message,
+        owner_user_id,
+        is_public,
         created_at,
         completed_at
         """;
@@ -58,6 +61,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
                 preview_height,
                 preview_has_audio,
                 preview_thumbnail_url,
+                owner_user_id,
                 created_at
             )
             VALUES (
@@ -74,6 +78,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
                 @preview_height,
                 @preview_has_audio,
                 @preview_thumbnail_url,
+                @owner_user_id,
                 @created_at
             )
             ON CONFLICT (id) DO UPDATE SET
@@ -89,6 +94,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
                 preview_height = EXCLUDED.preview_height,
                 preview_has_audio = EXCLUDED.preview_has_audio,
                 preview_thumbnail_url = EXCLUDED.preview_thumbnail_url,
+                owner_user_id = EXCLUDED.owner_user_id,
                 created_at = EXCLUDED.created_at;
             """);
 
@@ -121,6 +127,21 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
         return mediaFiles;
     }
 
+    public IReadOnlyCollection<MediaFile> GetMediaFilesByOwner(string ownerUserId)
+    {
+        using var command = dataSource.CreateCommand($"SELECT {MediaFileColumns} FROM media_files WHERE owner_user_id = @owner_user_id ORDER BY created_at DESC;");
+        AddText(command, "owner_user_id", ownerUserId);
+        using var reader = command.ExecuteReader();
+        var mediaFiles = new List<MediaFile>();
+
+        while (reader.Read())
+        {
+            mediaFiles.Add(ReadMediaFile(reader));
+        }
+
+        return mediaFiles;
+    }
+
     public void AddSticker(Sticker sticker)
     {
         using var command = dataSource.CreateCommand("""
@@ -138,6 +159,8 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
                 output_relative_path,
                 output_url,
                 error_message,
+                owner_user_id,
+                is_public,
                 created_at,
                 completed_at
             )
@@ -155,6 +178,8 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
                 @output_relative_path,
                 @output_url,
                 @error_message,
+                @owner_user_id,
+                @is_public,
                 @created_at,
                 @completed_at
             )
@@ -171,6 +196,8 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
                 output_relative_path = EXCLUDED.output_relative_path,
                 output_url = EXCLUDED.output_url,
                 error_message = EXCLUDED.error_message,
+                owner_user_id = EXCLUDED.owner_user_id,
+                is_public = EXCLUDED.is_public,
                 created_at = EXCLUDED.created_at,
                 completed_at = EXCLUDED.completed_at;
             """);
@@ -193,6 +220,36 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
     public IReadOnlyCollection<Sticker> GetStickers()
     {
         using var command = dataSource.CreateCommand($"SELECT {StickerColumns} FROM stickers ORDER BY created_at DESC;");
+        using var reader = command.ExecuteReader();
+        var stickers = new List<Sticker>();
+
+        while (reader.Read())
+        {
+            stickers.Add(ReadSticker(reader));
+        }
+
+        return stickers;
+    }
+
+    public IReadOnlyCollection<Sticker> GetStickersByOwner(string ownerUserId)
+    {
+        using var command = dataSource.CreateCommand($"SELECT {StickerColumns} FROM stickers WHERE owner_user_id = @owner_user_id ORDER BY created_at DESC;");
+        AddText(command, "owner_user_id", ownerUserId);
+        using var reader = command.ExecuteReader();
+        var stickers = new List<Sticker>();
+
+        while (reader.Read())
+        {
+            stickers.Add(ReadSticker(reader));
+        }
+
+        return stickers;
+    }
+
+    public IReadOnlyCollection<Sticker> GetPublicStickers()
+    {
+        using var command = dataSource.CreateCommand($"SELECT {StickerColumns} FROM stickers WHERE status = @status AND is_public = true ORDER BY created_at DESC;");
+        AddInteger(command, "status", (int)StickerStatus.Ready);
         using var reader = command.ExecuteReader();
         var stickers = new List<Sticker>();
 
@@ -233,6 +290,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
         AddNullableInteger(command, "preview_height", mediaFile.Preview?.Height);
         AddBoolean(command, "preview_has_audio", mediaFile.Preview?.HasAudio ?? false);
         AddNullableText(command, "preview_thumbnail_url", mediaFile.Preview?.ThumbnailUrl);
+        AddText(command, "owner_user_id", mediaFile.OwnerUserId);
         AddTimestamp(command, "created_at", mediaFile.CreatedAt);
     }
 
@@ -251,6 +309,8 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
         AddNullableText(command, "output_relative_path", sticker.OutputRelativePath);
         AddNullableText(command, "output_url", sticker.OutputUrl);
         AddNullableText(command, "error_message", sticker.ErrorMessage);
+        AddText(command, "owner_user_id", sticker.OwnerUserId);
+        AddBoolean(command, "is_public", sticker.IsPublic);
         AddTimestamp(command, "created_at", sticker.CreatedAt);
         AddNullableTimestamp(command, "completed_at", sticker.CompletedAt);
     }
@@ -276,6 +336,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
             GetInt64(reader, "size_bytes"),
             GetString(reader, "relative_path"),
             GetString(reader, "public_url"),
+            GetString(reader, "owner_user_id"),
             preview,
             GetDateTimeOffset(reader, "created_at"));
     }
@@ -295,6 +356,8 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
             GetNullableString(reader, "output_relative_path"),
             GetNullableString(reader, "output_url"),
             GetNullableString(reader, "error_message"),
+            GetString(reader, "owner_user_id"),
+            GetBoolean(reader, "is_public"),
             GetDateTimeOffset(reader, "created_at"),
             GetNullableDateTimeOffset(reader, "completed_at"));
 

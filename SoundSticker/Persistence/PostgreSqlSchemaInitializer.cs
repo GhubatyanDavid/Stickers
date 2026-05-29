@@ -23,6 +23,7 @@ public sealed class PostgreSqlSchemaInitializer(
                 preview_height integer NULL,
                 preview_has_audio boolean NOT NULL DEFAULT false,
                 preview_thumbnail_url text NULL,
+                owner_user_id text NOT NULL DEFAULT 'legacy',
                 created_at timestamp with time zone NOT NULL
             );
 
@@ -40,12 +41,26 @@ public sealed class PostgreSqlSchemaInitializer(
                 output_relative_path text NULL,
                 output_url text NULL,
                 error_message text NULL,
+                owner_user_id text NOT NULL DEFAULT 'legacy',
+                is_public boolean NOT NULL DEFAULT false,
                 created_at timestamp with time zone NOT NULL,
                 completed_at timestamp with time zone NULL
             );
 
+            ALTER TABLE media_files
+                ADD COLUMN IF NOT EXISTS owner_user_id text NOT NULL DEFAULT 'legacy';
+
+            ALTER TABLE stickers
+                ADD COLUMN IF NOT EXISTS owner_user_id text NOT NULL DEFAULT 'legacy';
+
+            ALTER TABLE stickers
+                ADD COLUMN IF NOT EXISTS is_public boolean NOT NULL DEFAULT false;
+
             CREATE INDEX IF NOT EXISTS ix_media_files_created_at ON media_files (created_at DESC);
+            CREATE INDEX IF NOT EXISTS ix_media_files_owner_created_at ON media_files (owner_user_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS ix_stickers_created_at ON stickers (created_at DESC);
+            CREATE INDEX IF NOT EXISTS ix_stickers_owner_created_at ON stickers (owner_user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS ix_stickers_public_ready_created_at ON stickers (is_public, status, created_at DESC);
             CREATE INDEX IF NOT EXISTS ix_stickers_status ON stickers (status);
             """);
 

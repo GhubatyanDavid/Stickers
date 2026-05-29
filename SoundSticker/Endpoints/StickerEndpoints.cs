@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using SoundSticker.Auth;
 using SoundSticker.Contracts;
 using SoundSticker.Domain;
 using SoundSticker.FileStorage;
@@ -20,8 +21,14 @@ public static class StickerEndpoints
             .RequireRateLimiting("sticker-creation")
             .WithName("CreateImageSticker");
 
-        api.MapGet("/stickers", ListStickers)
+        api.MapGet("/stickers/my", ListMyStickers)
+            .WithName("ListMyStickers");
+
+        api.MapGet("/stickers", ListMyStickers)
             .WithName("ListStickers");
+
+        api.MapGet("/stickers/all", ListAllStickers)
+            .WithName("ListAllStickers");
 
         api.MapGet("/stickers/{id:guid}", GetSticker)
             .WithName("GetSticker");
@@ -43,6 +50,7 @@ public static class StickerEndpoints
         IMediaRepository repository,
         StickerProcessingQueue queue,
         IOptions<StickerOptions> stickerOptions,
+        ICurrentUser currentUser,
         ILogger<Program> logger,
         CancellationToken cancellationToken) =>
         await CreateStickerAsync(
@@ -50,6 +58,7 @@ public static class StickerEndpoints
             repository,
             queue,
             stickerOptions,
+            currentUser,
             logger,
             requiredSourceKind: null,
             cancellationToken);
@@ -59,6 +68,7 @@ public static class StickerEndpoints
         IMediaRepository repository,
         StickerProcessingQueue queue,
         IOptions<StickerOptions> stickerOptions,
+        ICurrentUser currentUser,
         ILogger<Program> logger,
         CancellationToken cancellationToken) =>
         await CreateStickerAsync(
@@ -66,19 +76,29 @@ public static class StickerEndpoints
             repository,
             queue,
             stickerOptions,
+            currentUser,
             logger,
             MediaKind.Image,
             cancellationToken);
 
-    private static IResult ListStickers(IMediaRepository repository, ILogger<Program> logger)
+    private static IResult ListMyStickers(IMediaRepository repository, ICurrentUser currentUser, ILogger<Program> logger)
     {
-        logger.LogInformation("Sticker list requested.");
-        var stickers = repository.GetStickers().Select(StickerResponse.FromDomain).ToArray();
-        logger.LogInformation("Sticker list returned. Count: {StickerCount}.", stickers.Length);
+        var ownerUserId = currentUser.UserId;
+        logger.LogInformation("My sticker list requested. OwnerUserId: {OwnerUserId}.", ownerUserId);
+        var stickers = repository.GetStickersByOwner(ownerUserId).Select(StickerResponse.FromDomain).ToArray();
+        logger.LogInformation("My sticker list returned. OwnerUserId: {OwnerUserId}. Count: {StickerCount}.", ownerUserId, stickers.Length);
         return Results.Ok(stickers);
     }
 
-    private static IResult GetSticker(Guid id, IMediaRepository repository, ILogger<Program> logger)
+    private static IResult ListAllStickers(IMediaRepository repository, ILogger<Program> logger)
+    {
+        logger.LogInformation("All public sticker list requested.");
+        var stickers = repository.GetPublicStickers().Select(StickerResponse.FromDomain).ToArray();
+        logger.LogInformation("All public sticker list returned. Count: {StickerCount}.", stickers.Length);
+        return Results.Ok(stickers);
+    }
+
+    private static IResult GetSticker(Guid id, IMediaRepository repository, ICurrentUser currentUser, ILogger<Program> logger)
     {
         logger.LogInformation("Sticker requested. StickerId: {StickerId}.", id);
         var sticker = repository.GetSticker(id);
@@ -88,17 +108,37 @@ public static class StickerEndpoints
             return Results.NotFound();
         }
 
+        if (sticker.OwnerUserId != currentUser.UserId)
+        {
+            logger.LogWarning(
+                "Sticker request forbidden. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}. RequestUserId: {RequestUserId}.",
+                id,
+                sticker.OwnerUserId,
+                currentUser.UserId);
+            return Results.NotFound();
+        }
+
         logger.LogInformation("Sticker returned. StickerId: {StickerId}. Status: {StickerStatus}. OutputUrl: {OutputUrl}.", id, sticker.Status, sticker.OutputUrl);
         return Results.Ok(StickerResponse.FromDomain(sticker));
     }
 
-    private static IResult GetStickerStatus(Guid id, IMediaRepository repository, ILogger<Program> logger)
+    private static IResult GetStickerStatus(Guid id, IMediaRepository repository, ICurrentUser currentUser, ILogger<Program> logger)
     {
         logger.LogInformation("Sticker status requested. StickerId: {StickerId}.", id);
         var sticker = repository.GetSticker(id);
         if (sticker is null)
         {
             logger.LogWarning("Sticker status not found. StickerId: {StickerId}.", id);
+            return Results.NotFound();
+        }
+
+        if (sticker.OwnerUserId != currentUser.UserId)
+        {
+            logger.LogWarning(
+                "Sticker status forbidden. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}. RequestUserId: {RequestUserId}.",
+                id,
+                sticker.OwnerUserId,
+                currentUser.UserId);
             return Results.NotFound();
         }
 
@@ -116,22 +156,35 @@ public static class StickerEndpoints
         IMediaRepository repository,
         StickerProcessingQueue queue,
         IOptions<StickerOptions> stickerOptions,
+        ICurrentUser currentUser,
         ILogger logger,
         MediaKind? requiredSourceKind,
         CancellationToken cancellationToken)
     {
         logger.LogInformation(
-            "Sticker creation requested. SourceMediaId: {SourceMediaId}. CoverImageId: {CoverImageId}. AudioSourceMediaId: {AudioSourceMediaId}. AudioMode: {AudioMode}. TrimStartMs: {TrimStartMs}. TrimEndMs: {TrimEndMs}.",
+            "Sticker creation requested. SourceMediaId: {SourceMediaId}. CoverImageId: {CoverImageId}. AudioSourceMediaId: {AudioSourceMediaId}. AudioMode: {AudioMode}. TrimStartMs: {TrimStartMs}. TrimEndMs: {TrimEndMs}. IsPublic: {IsPublic}.",
             request.SourceMediaId,
             request.CoverImageId,
             request.AudioSourceMediaId,
             request.AudioMode,
             request.TrimStartMs,
-            request.TrimEndMs);
+            request.TrimEndMs,
+            request.IsPublic);
 
         var sourceMedia = repository.GetMediaFile(request.SourceMediaId);
         if (sourceMedia is null)
         {
+            return Results.NotFound(new ProblemResponse("Source media was not found."));
+        }
+
+        var ownerUserId = currentUser.UserId;
+        if (sourceMedia.OwnerUserId != ownerUserId)
+        {
+            logger.LogWarning(
+                "Sticker creation rejected because source media belongs to another user. SourceMediaId: {SourceMediaId}. OwnerUserId: {OwnerUserId}. RequestUserId: {RequestUserId}.",
+                sourceMedia.Id,
+                sourceMedia.OwnerUserId,
+                ownerUserId);
             return Results.NotFound(new ProblemResponse("Source media was not found."));
         }
 
@@ -141,9 +194,13 @@ public static class StickerEndpoints
             return validationResult;
         }
 
-        if (request.CoverImageId.HasValue && repository.GetMediaFile(request.CoverImageId.Value) is null)
+        if (request.CoverImageId.HasValue)
         {
-            return Results.BadRequest(new ProblemResponse("Cover image media was not found."));
+            var coverImage = repository.GetMediaFile(request.CoverImageId.Value);
+            if (coverImage is null || coverImage.OwnerUserId != ownerUserId)
+            {
+                return Results.BadRequest(new ProblemResponse("Cover image media was not found."));
+            }
         }
 
         var audioMode = GetEffectiveAudioMode(request.AudioMode, sourceMedia, logger);
@@ -157,6 +214,7 @@ public static class StickerEndpoints
             audioTrimStartMs,
             audioTrimEndMs,
             repository,
+            ownerUserId,
             out var audioSourceMedia,
             logger);
         if (audioValidationResult is not null)
@@ -173,14 +231,17 @@ public static class StickerEndpoints
             request.TrimEndMs,
             audioTrimStartMs,
             audioTrimEndMs,
-            audioMode);
+            audioMode,
+            ownerUserId,
+            request.IsPublic);
 
         repository.AddSticker(sticker);
         await queue.EnqueueAsync(sticker.Id, cancellationToken);
         logger.LogInformation(
-            "Sticker queued. StickerId: {StickerId}. SourceMediaId: {SourceMediaId}.",
+            "Sticker queued. StickerId: {StickerId}. SourceMediaId: {SourceMediaId}. IsPublic: {IsPublic}.",
             sticker.Id,
-            sticker.SourceMediaId);
+            sticker.SourceMediaId,
+            sticker.IsPublic);
 
         return Results.Accepted($"/api/stickers/{sticker.Id}", StickerResponse.FromDomain(sticker));
     }
@@ -254,6 +315,7 @@ public static class StickerEndpoints
         int audioTrimStartMs,
         int audioTrimEndMs,
         IMediaRepository repository,
+        string ownerUserId,
         out MediaFile? audioSourceMedia,
         ILogger logger)
     {
@@ -272,7 +334,7 @@ public static class StickerEndpoints
 
         if (audioMode == StickerAudioMode.UseMedia)
         {
-            return ValidateExternalAudio(request, audioTrimEndMs, repository, out audioSourceMedia, logger);
+            return ValidateExternalAudio(request, audioTrimEndMs, repository, ownerUserId, out audioSourceMedia, logger);
         }
 
         if (request.AudioSourceMediaId.HasValue)
@@ -297,6 +359,7 @@ public static class StickerEndpoints
         CreateVideoStickerRequest request,
         int audioTrimEndMs,
         IMediaRepository repository,
+        string ownerUserId,
         out MediaFile? audioSourceMedia,
         ILogger logger)
     {
@@ -308,7 +371,7 @@ public static class StickerEndpoints
         }
 
         audioSourceMedia = repository.GetMediaFile(request.AudioSourceMediaId.Value);
-        if (audioSourceMedia is null)
+        if (audioSourceMedia is null || audioSourceMedia.OwnerUserId != ownerUserId)
         {
             return Results.BadRequest(new ProblemResponse("Audio source media was not found."));
         }
@@ -356,6 +419,7 @@ public static class StickerEndpoints
         Guid id,
         IMediaRepository repository,
         IStoredFileManager storedFileManager,
+        ICurrentUser currentUser,
         ILogger<Program> logger)
     {
         logger.LogInformation("Sticker download requested. StickerId: {StickerId}.", id);
@@ -364,6 +428,16 @@ public static class StickerEndpoints
         if (sticker is null)
         {
             logger.LogWarning("Sticker download skipped because sticker was not found. StickerId: {StickerId}.", id);
+            return Results.NotFound(new ProblemResponse("Sticker was not found."));
+        }
+
+        if (sticker.OwnerUserId != currentUser.UserId)
+        {
+            logger.LogWarning(
+                "Sticker download forbidden. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}. RequestUserId: {RequestUserId}.",
+                id,
+                sticker.OwnerUserId,
+                currentUser.UserId);
             return Results.NotFound(new ProblemResponse("Sticker was not found."));
         }
 
@@ -393,6 +467,7 @@ public static class StickerEndpoints
         IMediaRepository repository,
         IStoredFileManager storedFileManager,
         StickerProcessingCancellationRegistry cancellationRegistry,
+        ICurrentUser currentUser,
         ILogger<Program> logger)
     {
         logger.LogInformation("Sticker delete requested. StickerId: {StickerId}.", id);
@@ -401,6 +476,16 @@ public static class StickerEndpoints
         if (existingSticker is null)
         {
             logger.LogWarning("Sticker delete skipped because sticker was not found. StickerId: {StickerId}.", id);
+            return Results.NotFound();
+        }
+
+        if (existingSticker.OwnerUserId != currentUser.UserId)
+        {
+            logger.LogWarning(
+                "Sticker delete forbidden. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}. RequestUserId: {RequestUserId}.",
+                id,
+                existingSticker.OwnerUserId,
+                currentUser.UserId);
             return Results.NotFound();
         }
 

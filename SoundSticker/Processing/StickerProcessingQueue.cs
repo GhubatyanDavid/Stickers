@@ -6,7 +6,7 @@ public sealed class StickerProcessingQueue(ILogger<StickerProcessingQueue> logge
 {
     private readonly Channel<Guid> _queue = Channel.CreateUnbounded<Guid>(new UnboundedChannelOptions
     {
-        SingleReader = true,
+        SingleReader = false,
         SingleWriter = false
     });
 

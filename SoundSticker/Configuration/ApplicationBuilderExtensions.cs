@@ -1,6 +1,7 @@
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using SoundSticker.Auth;
 using SoundSticker.Contracts;
 using SoundSticker.Infrastructure;
 using SoundSticker.Options;
@@ -110,6 +111,21 @@ public static class ApplicationBuilderExtensions
                     context.Response.Clear();
                     context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
                     await context.Response.WriteAsJsonAsync(new ProblemResponse("Database is unavailable. Check PostgreSQL connection settings."));
+                }
+            }
+            catch (MissingUserIdException exception)
+            {
+                var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogWarning(
+                    "Request rejected because user id is missing. Path: {Path}. Method: {Method}.",
+                    context.Request.Path,
+                    context.Request.Method);
+
+                if (!context.Response.HasStarted)
+                {
+                    context.Response.Clear();
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    await context.Response.WriteAsJsonAsync(new ProblemResponse(exception.Message));
                 }
             }
         });

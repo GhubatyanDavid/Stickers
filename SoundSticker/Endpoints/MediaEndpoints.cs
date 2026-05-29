@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using SoundSticker.Auth;
 using SoundSticker.Contracts;
 using SoundSticker.Options;
 using SoundSticker.Persistence;
@@ -21,21 +22,32 @@ public static class MediaEndpoints
         return api;
     }
 
-    private static IResult ListMedia(IMediaRepository repository, ILogger<Program> logger)
+    private static IResult ListMedia(IMediaRepository repository, ICurrentUser currentUser, ILogger<Program> logger)
     {
-        logger.LogInformation("Media list requested.");
-        var media = repository.GetMediaFiles().Select(MediaFileResponse.FromDomain).ToArray();
-        logger.LogInformation("Media list returned. Count: {MediaCount}.", media.Length);
+        var ownerUserId = currentUser.UserId;
+        logger.LogInformation("Media list requested. OwnerUserId: {OwnerUserId}.", ownerUserId);
+        var media = repository.GetMediaFilesByOwner(ownerUserId).Select(MediaFileResponse.FromDomain).ToArray();
+        logger.LogInformation("Media list returned. OwnerUserId: {OwnerUserId}. Count: {MediaCount}.", ownerUserId, media.Length);
         return Results.Ok(media);
     }
 
-    private static IResult GetMedia(Guid id, IMediaRepository repository, ILogger<Program> logger)
+    private static IResult GetMedia(Guid id, IMediaRepository repository, ICurrentUser currentUser, ILogger<Program> logger)
     {
         logger.LogInformation("Media requested. MediaFileId: {MediaFileId}.", id);
         var mediaFile = repository.GetMediaFile(id);
         if (mediaFile is null)
         {
             logger.LogWarning("Media not found. MediaFileId: {MediaFileId}.", id);
+            return Results.NotFound();
+        }
+
+        if (mediaFile.OwnerUserId != currentUser.UserId)
+        {
+            logger.LogWarning(
+                "Media request forbidden. MediaFileId: {MediaFileId}. OwnerUserId: {OwnerUserId}. RequestUserId: {RequestUserId}.",
+                id,
+                mediaFile.OwnerUserId,
+                currentUser.UserId);
             return Results.NotFound();
         }
 
@@ -47,6 +59,7 @@ public static class MediaEndpoints
         Guid id,
         IMediaRepository repository,
         IOptions<StorageOptions> storageOptions,
+        ICurrentUser currentUser,
         ILogger<Program> logger)
     {
         logger.LogInformation("Media file download requested. MediaFileId: {MediaFileId}.", id);
@@ -54,6 +67,16 @@ public static class MediaEndpoints
         if (mediaFile is null)
         {
             logger.LogWarning("Media file download skipped because media was not found. MediaFileId: {MediaFileId}.", id);
+            return Results.NotFound();
+        }
+
+        if (mediaFile.OwnerUserId != currentUser.UserId)
+        {
+            logger.LogWarning(
+                "Media file download forbidden. MediaFileId: {MediaFileId}. OwnerUserId: {OwnerUserId}. RequestUserId: {RequestUserId}.",
+                id,
+                mediaFile.OwnerUserId,
+                currentUser.UserId);
             return Results.NotFound();
         }
 

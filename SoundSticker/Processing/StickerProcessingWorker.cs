@@ -1,29 +1,46 @@
 using SoundSticker.Domain;
 using SoundSticker.Persistence;
 using Npgsql;
+using Microsoft.Extensions.Options;
+using SoundSticker.Options;
 
 namespace SoundSticker.Processing;
 
 public sealed class StickerProcessingWorker(
     StickerProcessingQueue queue,
     StickerProcessingCancellationRegistry cancellationRegistry,
+    IOptions<StickerOptions> stickerOptions,
     IMediaRepository repository,
     IStickerProcessor processor,
     ILogger<StickerProcessingWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("Sticker processing worker started.");
+        var workerCount = GetWorkerCount();
+        logger.LogInformation("Sticker processing worker started. WorkerCount: {WorkerCount}.", workerCount);
+        await EnqueueInterruptedStickersWithRetryAsync(stoppingToken);
+
+        var workers = Enumerable.Range(1, workerCount)
+            .Select(workerId => RunWorkerAsync(workerId, stoppingToken))
+            .ToArray();
+
+        await Task.WhenAll(workers);
+    }
+
+    private async Task RunWorkerAsync(int workerId, CancellationToken stoppingToken)
+    {
+        logger.LogInformation("Sticker processing worker lane started. WorkerId: {WorkerId}.", workerId);
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await EnqueueInterruptedStickersAsync(stoppingToken);
-
                 await foreach (var stickerId in queue.ReadAllAsync(stoppingToken))
                 {
-                    logger.LogInformation("Sticker dequeued for processing. StickerId: {StickerId}.", stickerId);
-                    await ProcessStickerAsync(stickerId, stoppingToken);
+                    logger.LogInformation(
+                        "Sticker dequeued for processing. WorkerId: {WorkerId}. StickerId: {StickerId}.",
+                        workerId,
+                        stickerId);
+                    await ProcessStickerAsync(stickerId, workerId, stoppingToken);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -33,14 +50,34 @@ public sealed class StickerProcessingWorker(
             catch (NpgsqlException exception)
             {
                 logger.LogError(
-                    "Sticker processing worker database loop failed. Message: {MessageText}",
+                    "Sticker processing worker lane database loop failed. WorkerId: {WorkerId}. Message: {MessageText}",
+                    workerId,
                     exception.Message);
                 await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
             }
             catch (Exception exception)
             {
-                logger.LogError(exception, "Sticker processing worker loop failed.");
+                logger.LogError(exception, "Sticker processing worker lane failed. WorkerId: {WorkerId}.", workerId);
                 await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+            }
+        }
+    }
+
+    private async Task EnqueueInterruptedStickersWithRetryAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await EnqueueInterruptedStickersAsync(cancellationToken);
+                return;
+            }
+            catch (NpgsqlException exception)
+            {
+                logger.LogError(
+                    "Could not re-queue interrupted stickers because PostgreSQL is unavailable. Message: {MessageText}",
+                    exception.Message);
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
             }
         }
     }
@@ -59,7 +96,7 @@ public sealed class StickerProcessingWorker(
         }
     }
 
-    private async Task ProcessStickerAsync(Guid stickerId, CancellationToken cancellationToken)
+    private async Task ProcessStickerAsync(Guid stickerId, int workerId, CancellationToken cancellationToken)
     {
         using var processingCancellation = cancellationRegistry.BeginProcessing(stickerId, cancellationToken);
         var processingToken = processingCancellation.Token;
@@ -98,7 +135,8 @@ public sealed class StickerProcessingWorker(
             }
 
             logger.LogInformation(
-                "Sticker processing started. StickerId: {StickerId}. SourceMediaId: {SourceMediaId}. SourceKind: {SourceKind}.",
+                "Sticker processing started. WorkerId: {WorkerId}. StickerId: {StickerId}. SourceMediaId: {SourceMediaId}. SourceKind: {SourceKind}.",
+                workerId,
                 sticker.Id,
                 sourceMedia.Id,
                 sourceMedia.Kind);
@@ -124,7 +162,8 @@ public sealed class StickerProcessingWorker(
             sticker.MarkReady(processedFile.RelativePath, processedFile.PublicUrl);
             repository.UpdateSticker(sticker);
             logger.LogInformation(
-                "Sticker processing completed. StickerId: {StickerId}. OutputRelativePath: {OutputRelativePath}.",
+                "Sticker processing completed. WorkerId: {WorkerId}. StickerId: {StickerId}. OutputRelativePath: {OutputRelativePath}.",
+                workerId,
                 sticker.Id,
                 processedFile.RelativePath);
         }
@@ -180,5 +219,12 @@ public sealed class StickerProcessingWorker(
                 stickerId,
                 dbException.Message);
         }
+    }
+
+    private int GetWorkerCount()
+    {
+        var configuredWorkerCount = stickerOptions.Value.WorkerCount;
+        var maxWorkerCount = Math.Max(1, Environment.ProcessorCount);
+        return Math.Clamp(configuredWorkerCount, 1, maxWorkerCount);
     }
 }

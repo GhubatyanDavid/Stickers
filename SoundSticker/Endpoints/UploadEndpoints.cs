@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Npgsql;
+using SoundSticker.Auth;
 using SoundSticker.Contracts;
 using SoundSticker.Domain;
 using SoundSticker.FileStorage;
@@ -26,6 +27,7 @@ public static class UploadEndpoints
         IFormFile file,
         ILocalFileStorage storage,
         IStoredFileManager storedFileManager,
+        ICurrentUser currentUser,
         IMediaRepository repository,
         IMediaPreviewAnalyzer previewAnalyzer,
         IOptions<StorageOptions> options,
@@ -66,10 +68,12 @@ public static class UploadEndpoints
         }
 
         var savedFile = await storage.SaveOriginalAsync(file, mediaKind, cancellationToken);
+        var ownerUserId = currentUser.UserId;
         logger.LogInformation(
-            "Upload file saved. MediaFileId: {MediaFileId}. RelativePath: {RelativePath}.",
+            "Upload file saved. MediaFileId: {MediaFileId}. RelativePath: {RelativePath}. OwnerUserId: {OwnerUserId}.",
             savedFile.Id,
-            savedFile.RelativePath);
+            savedFile.RelativePath,
+            ownerUserId);
 
         var mediaFile = MediaFile.Create(
             savedFile.Id,
@@ -78,7 +82,8 @@ public static class UploadEndpoints
             contentType,
             file.Length,
             savedFile.RelativePath,
-            savedFile.PublicUrl);
+            savedFile.PublicUrl,
+            ownerUserId);
 
         try
         {

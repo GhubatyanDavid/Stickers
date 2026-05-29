@@ -10,4 +10,5 @@ public sealed record CreateVideoStickerRequest(
     StickerAudioMode AudioMode,
     Guid? AudioSourceMediaId = null,
     int? AudioTrimStartMs = null,
-    int? AudioTrimEndMs = null);
+    int? AudioTrimEndMs = null,
+    bool IsPublic = false);

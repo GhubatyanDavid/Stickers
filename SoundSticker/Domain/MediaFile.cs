@@ -10,6 +10,7 @@ public sealed class MediaFile
         long sizeBytes,
         string relativePath,
         string publicUrl,
+        string ownerUserId,
         DateTimeOffset createdAt)
     {
         Id = id;
@@ -19,6 +20,7 @@ public sealed class MediaFile
         SizeBytes = sizeBytes;
         RelativePath = relativePath;
         PublicUrl = publicUrl;
+        OwnerUserId = ownerUserId;
         CreatedAt = createdAt;
     }
 
@@ -36,6 +38,8 @@ public sealed class MediaFile
 
     public string PublicUrl { get; }
 
+    public string OwnerUserId { get; }
+
     public MediaPreview? Preview { get; private set; }
 
     public DateTimeOffset CreatedAt { get; }
@@ -47,7 +51,8 @@ public sealed class MediaFile
         string? contentType,
         long sizeBytes,
         string relativePath,
-        string publicUrl) =>
+        string publicUrl,
+        string ownerUserId) =>
         new(
             id,
             Path.GetFileName(originalFileName),
@@ -56,6 +61,7 @@ public sealed class MediaFile
             sizeBytes,
             relativePath,
             publicUrl,
+            ownerUserId,
             DateTimeOffset.UtcNow);
 
     internal static MediaFile Restore(
@@ -66,6 +72,7 @@ public sealed class MediaFile
         long sizeBytes,
         string relativePath,
         string publicUrl,
+        string ownerUserId,
         MediaPreview? preview,
         DateTimeOffset createdAt)
     {
@@ -77,6 +84,7 @@ public sealed class MediaFile
             sizeBytes,
             relativePath,
             publicUrl,
+            ownerUserId,
             createdAt);
 
         mediaFile.Preview = preview;

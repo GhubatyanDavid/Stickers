@@ -14,6 +14,7 @@ ASP.NET Core backend for the sound sticker MVP.
 - Trim video and audio tracks from different time ranges.
 - Process sticker jobs in a background worker.
 - Save generated MP4 stickers under `storage/stickers`.
+- Mark stickers as private or public during creation.
 - Delete old or failed sticker jobs and their generated MP4 files.
 - Serve local media files from `/media`.
 
@@ -72,18 +73,24 @@ both tools and make sure `ffmpeg` and `ffprobe` are available in `PATH`, or set:
 
 ## Current MVP endpoints
 
+User-owned endpoints require an `X-User-Id` header. This is an MVP auth boundary
+that can later be replaced with JWT without changing the ownership model.
+
 ```text
 GET  /api/health
-POST /api/uploads
-GET  /api/media
-GET  /api/media/{id}
-POST /api/stickers/from-video
-POST /api/stickers/from-image
-GET  /api/stickers
-GET  /api/stickers/{id}
-GET  /api/stickers/{id}/status
-GET  /api/stickers/{id}/download
-DELETE /api/stickers/{id}
+POST /api/uploads                         X-User-Id required
+GET  /api/media                           X-User-Id required
+GET  /api/media/{id}                      X-User-Id required
+GET  /api/media/{id}/file                 X-User-Id required
+POST /api/stickers/from-video             X-User-Id required
+POST /api/stickers/from-image             X-User-Id required
+GET  /api/stickers                        X-User-Id required, alias for /my
+GET  /api/stickers/my                     X-User-Id required
+GET  /api/stickers/all                    public ready stickers only
+GET  /api/stickers/{id}                   X-User-Id required
+GET  /api/stickers/{id}/status            X-User-Id required
+GET  /api/stickers/{id}/download          X-User-Id required
+DELETE /api/stickers/{id}                 X-User-Id required
 ```
 
 ## Create video sticker request
@@ -93,11 +100,14 @@ DELETE /api/stickers/{id}
   "sourceMediaId": "uploaded-video-id",
   "trimStartMs": 0,
   "trimEndMs": 5000,
-  "audioMode": "KeepOriginal"
+  "audioMode": "KeepOriginal",
+  "isPublic": false
 }
 ```
 
 Use `"Mute"` for silent stickers.
+Use `"isPublic": true` when the sticker should appear in `/api/stickers/all`.
+Private stickers stay visible only in that user's `/api/stickers/my` list.
 
 `POST /api/stickers/from-image` accepts the same request shape. For image
 sources, use `"Mute"` or `"UseMedia"` because images do not have original

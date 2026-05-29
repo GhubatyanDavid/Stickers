@@ -12,6 +12,8 @@ public interface IMediaRepository
 
     IReadOnlyCollection<MediaFile> GetMediaFiles();
 
+    IReadOnlyCollection<MediaFile> GetMediaFilesByOwner(string ownerUserId);
+
     void AddSticker(Sticker sticker);
 
     void UpdateSticker(Sticker sticker);
@@ -19,6 +21,10 @@ public interface IMediaRepository
     Sticker? GetSticker(Guid id);
 
     IReadOnlyCollection<Sticker> GetStickers();
+
+    IReadOnlyCollection<Sticker> GetStickersByOwner(string ownerUserId);
+
+    IReadOnlyCollection<Sticker> GetPublicStickers();
 
     Sticker? RemoveSticker(Guid id);
 }
