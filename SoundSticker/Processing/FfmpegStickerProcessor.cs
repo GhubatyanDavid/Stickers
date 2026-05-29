@@ -8,6 +8,7 @@ namespace SoundSticker.Processing;
 
 public sealed class FfmpegStickerProcessor(
     IOptions<FfmpegOptions> ffmpegOptions,
+    IOptions<StickerOptions> stickerOptions,
     IOptions<StorageOptions> storageOptions,
     IWebHostEnvironment environment,
     ILogger<FfmpegStickerProcessor> logger) : IStickerProcessor
@@ -28,11 +29,13 @@ public sealed class FfmpegStickerProcessor(
         var outputRelativePath = Path.Combine(storageOptions.Value.StickersPath, outputFileName);
         var outputPath = Path.Combine(storageRoot, outputRelativePath);
         logger.LogInformation(
-            "FFmpeg sticker processing command preparing. StickerId: {StickerId}. SourceMediaId: {SourceMediaId}. AudioSourceMediaId: {AudioSourceMediaId}. OutputRelativePath: {OutputRelativePath}.",
+            "FFmpeg sticker processing command preparing. StickerId: {StickerId}. SourceMediaId: {SourceMediaId}. AudioSourceMediaId: {AudioSourceMediaId}. OutputRelativePath: {OutputRelativePath}. TrimStartMs: {TrimStartMs}. DurationMs: {DurationMs}.",
             sticker.Id,
             sourceMedia.Id,
             audioSourceMedia?.Id,
-            outputRelativePath);
+            outputRelativePath,
+            sticker.TrimStartMs,
+            sticker.DurationMs);
 
         var startInfo = new ProcessStartInfo
         {
@@ -44,6 +47,8 @@ public sealed class FfmpegStickerProcessor(
         };
 
         startInfo.ArgumentList.Add("-y");
+        startInfo.ArgumentList.Add("-hide_banner");
+        startInfo.ArgumentList.Add("-nostdin");
         if (sourceMedia.Kind == MediaKind.Image)
         {
             startInfo.ArgumentList.Add("-loop");
@@ -53,12 +58,23 @@ public sealed class FfmpegStickerProcessor(
             startInfo.ArgumentList.Add("-t");
             startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
         }
+        else
+        {
+            startInfo.ArgumentList.Add("-ss");
+            startInfo.ArgumentList.Add(ToSeconds(sticker.TrimStartMs));
+            startInfo.ArgumentList.Add("-t");
+            startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
+        }
 
         startInfo.ArgumentList.Add("-i");
         startInfo.ArgumentList.Add(sourcePath);
 
         if (audioSourceMedia is not null)
         {
+            startInfo.ArgumentList.Add("-ss");
+            startInfo.ArgumentList.Add(ToSeconds(sticker.AudioTrimStartMs));
+            startInfo.ArgumentList.Add("-t");
+            startInfo.ArgumentList.Add(ToSeconds(sticker.AudioDurationMs));
             startInfo.ArgumentList.Add("-i");
             startInfo.ArgumentList.Add(GetStoredMediaPath(storageRoot, audioSourceMedia));
         }
@@ -92,14 +108,52 @@ public sealed class FfmpegStickerProcessor(
         startInfo.ArgumentList.Add("yuv420p");
         startInfo.ArgumentList.Add("-movflags");
         startInfo.ArgumentList.Add("+faststart");
+        startInfo.ArgumentList.Add("-t");
+        startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
+        startInfo.ArgumentList.Add("-shortest");
         startInfo.ArgumentList.Add(outputPath);
+
+        using var timeout = new CancellationTokenSource(GetProcessingTimeout());
+        using var combinedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+        var processingToken = combinedCancellation.Token;
+        var stopwatch = Stopwatch.StartNew();
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Could not start FFmpeg process.");
+        using var cancellationRegistration = processingToken.Register(() =>
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    logger.LogInformation("Killing FFmpeg process because sticker processing was canceled. StickerId: {StickerId}.", sticker.Id);
+                    process.Kill(entireProcessTree: true);
+                }
+            }
+            catch (InvalidOperationException)
+            {
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Could not kill FFmpeg process for canceled sticker {StickerId}.", sticker.Id);
+            }
+        });
 
-        var standardError = await process.StandardError.ReadToEndAsync(cancellationToken);
-        var standardOutput = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
+        var standardErrorTask = process.StandardError.ReadToEndAsync(processingToken);
+        var standardOutputTask = process.StandardOutput.ReadToEndAsync(processingToken);
+        await process.WaitForExitAsync(processingToken);
+        var standardError = await standardErrorTask;
+        var standardOutput = await standardOutputTask;
+        stopwatch.Stop();
+
+        if (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                "FFmpeg timed out for sticker {StickerId} after {ElapsedMs} ms.",
+                sticker.Id,
+                stopwatch.ElapsedMilliseconds);
+            throw new TimeoutException("FFmpeg timed out while processing the sticker.");
+        }
 
         if (process.ExitCode != 0)
         {
@@ -115,9 +169,10 @@ public sealed class FfmpegStickerProcessor(
 
         var publicUrl = $"{StorageOptions.PublicRequestPath}/{outputRelativePath.Replace('\\', '/')}";
         logger.LogInformation(
-            "FFmpeg sticker processing succeeded. StickerId: {StickerId}. OutputRelativePath: {OutputRelativePath}.",
+            "FFmpeg sticker processing succeeded. StickerId: {StickerId}. OutputRelativePath: {OutputRelativePath}. ElapsedMs: {ElapsedMs}.",
             sticker.Id,
-            outputRelativePath);
+            outputRelativePath,
+            stopwatch.ElapsedMilliseconds);
 
         return new ProcessedStickerFile(outputRelativePath, publicUrl);
     }
@@ -135,11 +190,10 @@ public sealed class FfmpegStickerProcessor(
 
     private static string BuildFilterGraph(Sticker sticker, MediaKind sourceKind)
     {
-        var videoStart = ToSeconds(sticker.TrimStartMs);
         var videoDuration = ToSeconds(sticker.DurationMs);
         var videoFilter = sourceKind == MediaKind.Image
             ? $"[0:v:0]fps=30,scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1,trim=duration={videoDuration},setpts=PTS-STARTPTS[v]"
-            : $"[0:v:0]trim=start={videoStart}:duration={videoDuration},setpts=PTS-STARTPTS[v]";
+            : $"[0:v:0]trim=duration={videoDuration},setpts=PTS-STARTPTS[v]";
 
         if (sticker.AudioMode == StickerAudioMode.Mute)
         {
@@ -147,10 +201,9 @@ public sealed class FfmpegStickerProcessor(
         }
 
         var audioInputIndex = sticker.AudioMode == StickerAudioMode.UseMedia ? 1 : 0;
-        var audioStart = ToSeconds(sticker.AudioTrimStartMs);
         var audioDuration = ToSeconds(sticker.AudioDurationMs);
         var audioFilter =
-            $"[{audioInputIndex}:a:0]atrim=start={audioStart}:duration={audioDuration}," +
+            $"[{audioInputIndex}:a:0]atrim=duration={audioDuration}," +
             $"asetpts=PTS-STARTPTS,apad,atrim=duration={videoDuration}[a]";
 
         return $"{videoFilter};{audioFilter}";
@@ -158,4 +211,7 @@ public sealed class FfmpegStickerProcessor(
 
     private static string ToSeconds(int milliseconds) =>
         (milliseconds / 1000d).ToString("0.###", CultureInfo.InvariantCulture);
+
+    private TimeSpan GetProcessingTimeout() =>
+        TimeSpan.FromSeconds(Math.Max(5, stickerOptions.Value.ProcessingTimeoutSeconds));
 }

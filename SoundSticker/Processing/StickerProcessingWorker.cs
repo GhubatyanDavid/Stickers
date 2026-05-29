@@ -6,6 +6,7 @@ namespace SoundSticker.Processing;
 
 public sealed class StickerProcessingWorker(
     StickerProcessingQueue queue,
+    StickerProcessingCancellationRegistry cancellationRegistry,
     IMediaRepository repository,
     IStickerProcessor processor,
     ILogger<StickerProcessingWorker> logger) : BackgroundService
@@ -60,6 +61,9 @@ public sealed class StickerProcessingWorker(
 
     private async Task ProcessStickerAsync(Guid stickerId, CancellationToken cancellationToken)
     {
+        using var processingCancellation = cancellationRegistry.BeginProcessing(stickerId, cancellationToken);
+        var processingToken = processingCancellation.Token;
+
         try
         {
             var sticker = repository.GetSticker(stickerId);
@@ -116,7 +120,7 @@ public sealed class StickerProcessingWorker(
                 return;
             }
 
-            var processedFile = await processor.ProcessStickerAsync(sourceMedia, audioSourceMedia, sticker, cancellationToken);
+            var processedFile = await processor.ProcessStickerAsync(sourceMedia, audioSourceMedia, sticker, processingToken);
             sticker.MarkReady(processedFile.RelativePath, processedFile.PublicUrl);
             repository.UpdateSticker(sticker);
             logger.LogInformation(
@@ -127,6 +131,10 @@ public sealed class StickerProcessingWorker(
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
+        }
+        catch (OperationCanceledException) when (processingToken.IsCancellationRequested)
+        {
+            logger.LogInformation("Sticker processing canceled. StickerId: {StickerId}.", stickerId);
         }
         catch (NpgsqlException exception)
         {
@@ -155,6 +163,10 @@ public sealed class StickerProcessingWorker(
                     stickerId,
                     dbException.Message);
             }
+        }
+        finally
+        {
+            cancellationRegistry.EndProcessing(stickerId);
         }
     }
 }
