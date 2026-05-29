@@ -32,7 +32,7 @@ public sealed class FfmpegMediaPreviewAnalyzer(
             var storageRoot = storageOptions.Value.GetResolvedRootPath(environment.ContentRootPath);
             var sourcePath = Path.Combine(storageRoot, mediaFile.RelativePath);
             var probe = await ProbeAsync(sourcePath, cancellationToken);
-            var thumbnailUrl = mediaFile.Kind is MediaKind.Gif or MediaKind.Video
+            var thumbnailUrl = storageOptions.Value.GeneratePreviewThumbnails && mediaFile.Kind is MediaKind.Gif or MediaKind.Video
                 ? await CreateThumbnailAsync(storageRoot, sourcePath, mediaFile.Id, cancellationToken)
                 : null;
 
@@ -83,9 +83,11 @@ public sealed class FfmpegMediaPreviewAnalyzer(
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Could not start FFprobe process.");
 
-        var json = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var standardError = await process.StandardError.ReadToEndAsync(cancellationToken);
+        var jsonTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var standardErrorTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
+        var json = await jsonTask;
+        var standardError = await standardErrorTask;
 
         if (process.ExitCode != 0)
         {
@@ -130,9 +132,11 @@ public sealed class FfmpegMediaPreviewAnalyzer(
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Could not start FFmpeg thumbnail process.");
 
-        var standardError = await process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var standardErrorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        var standardOutputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
+        var standardError = await standardErrorTask;
+        await standardOutputTask;
 
         if (process.ExitCode != 0)
         {

@@ -7,4 +7,10 @@ public sealed class StickerOptions
     public int MaxDurationMs { get; set; } = 30_000;
 
     public int ProcessingTimeoutSeconds { get; set; } = 45;
+
+    public int OutputFps { get; set; } = 24;
+
+    public int MaxOutputDimension { get; set; } = 512;
+
+    public string VideoPreset { get; set; } = "ultrafast";
 }

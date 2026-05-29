@@ -143,30 +143,42 @@ public sealed class StickerProcessingWorker(
                 stickerId,
                 exception.Message);
         }
+        catch (TimeoutException exception)
+        {
+            logger.LogWarning(
+                "Sticker {StickerId} failed because processing timed out. Message: {MessageText}",
+                stickerId,
+                exception.Message);
+            MarkStickerFailed(stickerId, exception.Message);
+        }
         catch (Exception exception)
         {
             logger.LogError(exception, "Sticker {StickerId} failed during processing.", stickerId);
-
-            try
-            {
-                var sticker = repository.GetSticker(stickerId);
-                if (sticker is not null)
-                {
-                    sticker.MarkFailed(exception.Message);
-                    repository.UpdateSticker(sticker);
-                }
-            }
-            catch (NpgsqlException dbException)
-            {
-                logger.LogError(
-                    "Could not mark sticker {StickerId} as failed because PostgreSQL is unavailable. Message: {MessageText}",
-                    stickerId,
-                    dbException.Message);
-            }
+            MarkStickerFailed(stickerId, exception.Message);
         }
         finally
         {
             cancellationRegistry.EndProcessing(stickerId);
+        }
+    }
+
+    private void MarkStickerFailed(Guid stickerId, string errorMessage)
+    {
+        try
+        {
+            var sticker = repository.GetSticker(stickerId);
+            if (sticker is not null)
+            {
+                sticker.MarkFailed(errorMessage);
+                repository.UpdateSticker(sticker);
+            }
+        }
+        catch (NpgsqlException dbException)
+        {
+            logger.LogError(
+                "Could not mark sticker {StickerId} as failed because PostgreSQL is unavailable. Message: {MessageText}",
+                stickerId,
+                dbException.Message);
         }
     }
 }

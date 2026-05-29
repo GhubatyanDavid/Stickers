@@ -20,6 +20,7 @@ public sealed class FfmpegStickerProcessor(
         CancellationToken cancellationToken)
     {
         var storageRoot = storageOptions.Value.GetResolvedRootPath(environment.ContentRootPath);
+        var options = stickerOptions.Value;
         var sourcePath = GetStoredMediaPath(storageRoot, sourceMedia);
 
         var stickersDirectory = Path.Combine(storageRoot, storageOptions.Value.StickersPath);
@@ -54,7 +55,7 @@ public sealed class FfmpegStickerProcessor(
             startInfo.ArgumentList.Add("-loop");
             startInfo.ArgumentList.Add("1");
             startInfo.ArgumentList.Add("-framerate");
-            startInfo.ArgumentList.Add("30");
+            startInfo.ArgumentList.Add(GetOutputFps(options).ToString(CultureInfo.InvariantCulture));
             startInfo.ArgumentList.Add("-t");
             startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
         }
@@ -80,7 +81,7 @@ public sealed class FfmpegStickerProcessor(
         }
 
         startInfo.ArgumentList.Add("-filter_complex");
-        startInfo.ArgumentList.Add(BuildFilterGraph(sticker, sourceMedia.Kind));
+        startInfo.ArgumentList.Add(BuildFilterGraph(sticker, sourceMedia.Kind, options));
         startInfo.ArgumentList.Add("-map");
         startInfo.ArgumentList.Add("[v]");
 
@@ -101,9 +102,9 @@ public sealed class FfmpegStickerProcessor(
         startInfo.ArgumentList.Add("-c:v");
         startInfo.ArgumentList.Add("libx264");
         startInfo.ArgumentList.Add("-preset");
-        startInfo.ArgumentList.Add("veryfast");
+        startInfo.ArgumentList.Add(string.IsNullOrWhiteSpace(options.VideoPreset) ? "ultrafast" : options.VideoPreset);
         startInfo.ArgumentList.Add("-crf");
-        startInfo.ArgumentList.Add("28");
+        startInfo.ArgumentList.Add("30");
         startInfo.ArgumentList.Add("-pix_fmt");
         startInfo.ArgumentList.Add("yuv420p");
         startInfo.ArgumentList.Add("-movflags");
@@ -126,7 +127,10 @@ public sealed class FfmpegStickerProcessor(
             {
                 if (!process.HasExited)
                 {
-                    logger.LogInformation("Killing FFmpeg process because sticker processing was canceled. StickerId: {StickerId}.", sticker.Id);
+                    var reason = timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested
+                        ? "timed out"
+                        : "was canceled";
+                    logger.LogInformation("Killing FFmpeg process because sticker processing {Reason}. StickerId: {StickerId}.", reason, sticker.Id);
                     process.Kill(entireProcessTree: true);
                 }
             }
@@ -139,20 +143,28 @@ public sealed class FfmpegStickerProcessor(
             }
         });
 
-        var standardErrorTask = process.StandardError.ReadToEndAsync(processingToken);
-        var standardOutputTask = process.StandardOutput.ReadToEndAsync(processingToken);
-        await process.WaitForExitAsync(processingToken);
-        var standardError = await standardErrorTask;
-        var standardOutput = await standardOutputTask;
-        stopwatch.Stop();
-
-        if (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        string standardError;
+        string standardOutput;
+        try
         {
+            var standardErrorTask = process.StandardError.ReadToEndAsync(processingToken);
+            var standardOutputTask = process.StandardOutput.ReadToEndAsync(processingToken);
+            await process.WaitForExitAsync(processingToken);
+            standardError = await standardErrorTask;
+            standardOutput = await standardOutputTask;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            stopwatch.Stop();
             logger.LogWarning(
                 "FFmpeg timed out for sticker {StickerId} after {ElapsedMs} ms.",
                 sticker.Id,
                 stopwatch.ElapsedMilliseconds);
             throw new TimeoutException("FFmpeg timed out while processing the sticker.");
+        }
+        finally
+        {
+            stopwatch.Stop();
         }
 
         if (process.ExitCode != 0)
@@ -188,12 +200,15 @@ public sealed class FfmpegStickerProcessor(
         return path;
     }
 
-    private static string BuildFilterGraph(Sticker sticker, MediaKind sourceKind)
+    private static string BuildFilterGraph(Sticker sticker, MediaKind sourceKind, StickerOptions options)
     {
+        var fps = GetOutputFps(options);
+        var maxDimension = GetMaxOutputDimension(options);
         var videoDuration = ToSeconds(sticker.DurationMs);
+        var videoScale = $"scale={maxDimension}:{maxDimension}:force_original_aspect_ratio=decrease";
         var videoFilter = sourceKind == MediaKind.Image
-            ? $"[0:v:0]fps=30,scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1,trim=duration={videoDuration},setpts=PTS-STARTPTS[v]"
-            : $"[0:v:0]trim=duration={videoDuration},setpts=PTS-STARTPTS[v]";
+            ? $"[0:v:0]fps={fps},{videoScale},scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1,format=yuv420p,trim=duration={videoDuration},setpts=PTS-STARTPTS[v]"
+            : $"[0:v:0]fps={fps},{videoScale},scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1,format=yuv420p,trim=duration={videoDuration},setpts=PTS-STARTPTS[v]";
 
         if (sticker.AudioMode == StickerAudioMode.Mute)
         {
@@ -214,4 +229,10 @@ public sealed class FfmpegStickerProcessor(
 
     private TimeSpan GetProcessingTimeout() =>
         TimeSpan.FromSeconds(Math.Max(5, stickerOptions.Value.ProcessingTimeoutSeconds));
+
+    private static int GetOutputFps(StickerOptions options) =>
+        Math.Clamp(options.OutputFps, 10, 30);
+
+    private static int GetMaxOutputDimension(StickerOptions options) =>
+        Math.Clamp(options.MaxOutputDimension, 128, 1280);
 }

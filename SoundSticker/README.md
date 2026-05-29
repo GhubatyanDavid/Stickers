@@ -29,9 +29,17 @@ Configure PostgreSQL first:
     "AutoCreateSchema": true
   },
   "ConnectionStrings": {
-    "Postgres": "Host=localhost;Port=5432;Database=soundsticker;Username=postgres;Password=postgres"
+    "Postgres": "Host=localhost;Port=5432;Database=soundsticker;Username=appuser;Password=change-me"
   }
 }
+```
+
+For production, prefer environment variables or a systemd override instead of
+committing the real password:
+
+```ini
+[Service]
+Environment="ConnectionStrings__Postgres=Host=127.0.0.1;Port=5432;Database=soundsticker;Username=appuser;Password=your-real-password"
 ```
 
 The API creates the `media_files` and `stickers` tables on startup when
@@ -74,6 +82,7 @@ POST /api/stickers/from-image
 GET  /api/stickers
 GET  /api/stickers/{id}
 GET  /api/stickers/{id}/status
+GET  /api/stickers/{id}/download
 DELETE /api/stickers/{id}
 ```
 
