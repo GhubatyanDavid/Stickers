@@ -13,20 +13,34 @@ public sealed class StickerProcessingWorker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Sticker processing worker started.");
-        try
+        while (!stoppingToken.IsCancellationRequested)
         {
-            await EnqueueInterruptedStickersAsync(stoppingToken);
-        }
-        catch (NpgsqlException exception)
-        {
-            logger.LogError(
-                "Could not re-queue interrupted stickers because PostgreSQL is unavailable. Message: {MessageText}",
-                exception.Message);
-        }
+            try
+            {
+                await EnqueueInterruptedStickersAsync(stoppingToken);
 
-        await foreach (var stickerId in queue.ReadAllAsync(stoppingToken))
-        {
-            await ProcessStickerAsync(stickerId, stoppingToken);
+                await foreach (var stickerId in queue.ReadAllAsync(stoppingToken))
+                {
+                    logger.LogInformation("Sticker dequeued for processing. StickerId: {StickerId}.", stickerId);
+                    await ProcessStickerAsync(stickerId, stoppingToken);
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (NpgsqlException exception)
+            {
+                logger.LogError(
+                    "Sticker processing worker database loop failed. Message: {MessageText}",
+                    exception.Message);
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+            }
+            catch (Exception exception)
+            {
+                logger.LogError(exception, "Sticker processing worker loop failed.");
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+            }
         }
     }
 

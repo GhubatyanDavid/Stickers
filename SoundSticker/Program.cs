@@ -585,22 +585,31 @@ static IResult DeleteSticker(
     var existingSticker = repository.GetSticker(id);
     if (existingSticker is null)
     {
+        logger.LogWarning("Sticker delete skipped because sticker was not found. StickerId: {StickerId}.", id);
         return Results.NotFound();
     }
 
     if (existingSticker.Status == StickerStatus.Processing)
     {
+        logger.LogWarning(
+            "Sticker delete blocked because sticker is processing. StickerId: {StickerId}. Status: {StickerStatus}.",
+            id,
+            existingSticker.Status);
         return Results.Conflict(new ProblemResponse("Sticker is currently processing and cannot be deleted."));
     }
 
     var removedSticker = repository.RemoveSticker(id);
     if (removedSticker is null)
     {
+        logger.LogWarning("Sticker delete skipped because remove returned null. StickerId: {StickerId}.", id);
         return Results.NotFound();
     }
 
-    DeleteStickerOutputFile(removedSticker, storageOptions.Value);
-    logger.LogInformation("Sticker deleted. StickerId: {StickerId}.", id);
+    DeleteStickerOutputFile(removedSticker, storageOptions.Value, logger);
+    logger.LogInformation(
+        "Sticker deleted from repository. StickerId: {StickerId}. OutputRelativePath: {OutputRelativePath}.",
+        id,
+        removedSticker.OutputRelativePath);
     return Results.NoContent();
 }
 
@@ -628,17 +637,18 @@ static PostgresConnectionInfo GetPostgresConnectionInfo(string connectionString)
         csb.Username);
 }
 
-static void DeleteStickerOutputFile(Sticker sticker, StorageOptions storageOptions)
+static void DeleteStickerOutputFile(Sticker sticker, StorageOptions storageOptions, ILogger logger)
 {
     if (string.IsNullOrWhiteSpace(sticker.OutputRelativePath))
     {
+        logger.LogInformation("Sticker output file delete skipped because output path is empty. StickerId: {StickerId}.", sticker.Id);
         return;
     }
 
-    DeleteStoredFile(sticker.OutputRelativePath, storageOptions);
+    DeleteStoredFile(sticker.OutputRelativePath, storageOptions, logger);
 }
 
-static void DeleteStoredFile(string relativePath, StorageOptions storageOptions)
+static void DeleteStoredFile(string relativePath, StorageOptions storageOptions, ILogger? logger = null)
 {
     var storageRoot = storageOptions.GetResolvedRootPath(Directory.GetCurrentDirectory());
     var fullPath = Path.GetFullPath(Path.Combine(storageRoot, relativePath));
@@ -646,13 +656,22 @@ static void DeleteStoredFile(string relativePath, StorageOptions storageOptions)
 
     if (!IsInsideDirectory(fullPath, fullStorageRoot))
     {
+        logger?.LogWarning(
+            "Stored file delete blocked because path is outside storage root. RelativePath: {RelativePath}. FullPath: {FullPath}. StorageRoot: {StorageRoot}.",
+            relativePath,
+            fullPath,
+            fullStorageRoot);
         return;
     }
 
-    if (File.Exists(fullPath))
+    if (!File.Exists(fullPath))
     {
-        File.Delete(fullPath);
+        logger?.LogWarning("Stored file delete skipped because file does not exist. RelativePath: {RelativePath}. FullPath: {FullPath}.", relativePath, fullPath);
+        return;
     }
+
+    File.Delete(fullPath);
+    logger?.LogInformation("Stored file deleted. RelativePath: {RelativePath}. FullPath: {FullPath}.", relativePath, fullPath);
 }
 
 static bool IsInsideDirectory(string path, string directory)
