@@ -15,12 +15,14 @@ public sealed record StickerResponse(
     int AudioTrimEndMs,
     int DurationMs,
     bool IsPublic,
+    bool IsFavorite,
+    string SourceType,
     string? OutputUrl,
     string? ErrorMessage,
     DateTimeOffset CreatedAt,
     DateTimeOffset? CompletedAt)
 {
-    public static StickerResponse FromDomain(Sticker sticker) =>
+    public static StickerResponse FromDomain(Sticker sticker, MediaKind sourceKind) =>
         new(
             sticker.Id,
             sticker.SourceMediaId,
@@ -34,8 +36,13 @@ public sealed record StickerResponse(
             sticker.AudioTrimEndMs,
             sticker.DurationMs,
             sticker.IsPublic,
+            false,
+            GetSourceType(sourceKind),
             sticker.OutputUrl,
             sticker.ErrorMessage,
             sticker.CreatedAt,
             sticker.CompletedAt);
+
+    private static string GetSourceType(MediaKind sourceKind) =>
+        sourceKind == MediaKind.Image ? "image" : "video";
 }

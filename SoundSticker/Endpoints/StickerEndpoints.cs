@@ -133,7 +133,7 @@ public static class StickerEndpoints
     {
         var ownerUserId = currentUser.UserId;
         logger.LogInformation("My sticker list requested. OwnerUserId: {OwnerUserId}.", ownerUserId);
-        var stickers = repository.GetStickersByOwner(ownerUserId).Select(StickerResponse.FromDomain).ToArray();
+        var stickers = repository.GetStickersByOwner(ownerUserId).Select(sticker => ToStickerResponse(sticker, repository)).ToArray();
         logger.LogInformation("My sticker list returned. OwnerUserId: {OwnerUserId}. Count: {StickerCount}.", ownerUserId, stickers.Length);
         return Results.Ok(stickers);
     }
@@ -141,7 +141,7 @@ public static class StickerEndpoints
     private static IResult ListAllStickers(IMediaRepository repository, ILogger<Program> logger)
     {
         logger.LogInformation("All public sticker list requested.");
-        var stickers = repository.GetPublicStickers().Select(StickerResponse.FromDomain).ToArray();
+        var stickers = repository.GetPublicStickers().Select(sticker => ToStickerResponse(sticker, repository)).ToArray();
         logger.LogInformation("All public sticker list returned. Count: {StickerCount}.", stickers.Length);
         return Results.Ok(stickers);
     }
@@ -167,7 +167,7 @@ public static class StickerEndpoints
         }
 
         logger.LogInformation("Sticker returned. StickerId: {StickerId}. Status: {StickerStatus}. OutputUrl: {OutputUrl}.", id, sticker.Status, sticker.OutputUrl);
-        return Results.Ok(StickerResponse.FromDomain(sticker));
+        return Results.Ok(ToStickerResponse(sticker, repository));
     }
 
     private static IResult GetStickerStatus(Guid id, IMediaRepository repository, ICurrentUser currentUser, ILogger<Program> logger)
@@ -291,7 +291,7 @@ public static class StickerEndpoints
             sticker.SourceMediaId,
             sticker.IsPublic);
 
-        return Results.Accepted($"/api/stickers/{sticker.Id}", StickerResponse.FromDomain(sticker));
+        return Results.Accepted($"/api/stickers/{sticker.Id}", StickerResponse.FromDomain(sticker, sourceMedia.Kind));
     }
 
     private static IResult? ValidateSource(
@@ -567,4 +567,10 @@ public static class StickerEndpoints
 
     private static bool IsOutsideMediaDuration(int trimEndMs, MediaFile mediaFile) =>
         mediaFile.Preview?.DurationMs is long durationMs && trimEndMs > durationMs;
+
+    private static StickerResponse ToStickerResponse(Sticker sticker, IMediaRepository repository)
+    {
+        var sourceKind = repository.GetMediaFile(sticker.SourceMediaId)?.Kind ?? MediaKind.Video;
+        return StickerResponse.FromDomain(sticker, sourceKind);
+    }
 }
