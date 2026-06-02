@@ -246,6 +246,28 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
         return stickers;
     }
 
+    public IReadOnlyCollection<Sticker> GetVisibleStickersForOwner(string ownerUserId)
+    {
+        using var command = dataSource.CreateCommand($"""
+            SELECT {StickerColumns}
+            FROM stickers
+            WHERE owner_user_id = @owner_user_id
+                OR (status = @status AND is_public = true)
+            ORDER BY created_at DESC;
+            """);
+        AddText(command, "owner_user_id", ownerUserId);
+        AddInteger(command, "status", (int)StickerStatus.Ready);
+        using var reader = command.ExecuteReader();
+        var stickers = new List<Sticker>();
+
+        while (reader.Read())
+        {
+            stickers.Add(ReadSticker(reader));
+        }
+
+        return stickers;
+    }
+
     public IReadOnlyCollection<Sticker> GetPublicStickers()
     {
         using var command = dataSource.CreateCommand($"SELECT {StickerColumns} FROM stickers WHERE status = @status AND is_public = true ORDER BY created_at DESC;");

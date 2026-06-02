@@ -52,6 +52,14 @@ public sealed class InMemoryMediaRepository : IMediaRepository
             .OrderByDescending(sticker => sticker.CreatedAt)
             .ToArray();
 
+    public IReadOnlyCollection<Sticker> GetVisibleStickersForOwner(string ownerUserId) =>
+        _stickers.Values
+            .Where(sticker =>
+                sticker.OwnerUserId == ownerUserId ||
+                (sticker.Status == StickerStatus.Ready && sticker.IsPublic))
+            .OrderByDescending(sticker => sticker.CreatedAt)
+            .ToArray();
+
     public IReadOnlyCollection<Sticker> GetPublicStickers() =>
         _stickers.Values
             .Where(sticker => sticker.Status == StickerStatus.Ready && sticker.IsPublic)

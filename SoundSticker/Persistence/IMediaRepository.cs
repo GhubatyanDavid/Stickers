@@ -24,6 +24,8 @@ public interface IMediaRepository
 
     IReadOnlyCollection<Sticker> GetStickersByOwner(string ownerUserId);
 
+    IReadOnlyCollection<Sticker> GetVisibleStickersForOwner(string ownerUserId);
+
     IReadOnlyCollection<Sticker> GetPublicStickers();
 
     Sticker? RemoveSticker(Guid id);

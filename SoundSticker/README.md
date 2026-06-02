@@ -84,12 +84,12 @@ GET  /api/media/{id}                      X-User-Id required
 GET  /api/media/{id}/file                 X-User-Id required
 POST /api/stickers/from-video             X-User-Id required
 POST /api/stickers/from-image             X-User-Id required
-GET  /api/stickers                        X-User-Id required, alias for /my
+GET  /api/stickers                        X-User-Id required, owned stickers plus ready public stickers
 GET  /api/stickers/my                     X-User-Id required
 GET  /api/stickers/all                    public ready stickers only
-GET  /api/stickers/{id}                   X-User-Id required
-GET  /api/stickers/{id}/status            X-User-Id required
-GET  /api/stickers/{id}/download          X-User-Id required
+GET  /api/stickers/{id}                   owned or ready public sticker
+GET  /api/stickers/{id}/status            owned or ready public sticker
+GET  /api/stickers/{id}/download          owned or ready public sticker
 DELETE /api/stickers/{id}                 X-User-Id required
 ```
 
@@ -108,6 +108,9 @@ DELETE /api/stickers/{id}                 X-User-Id required
 Use `"Mute"` for silent stickers.
 Use `"isPublic": true` when the sticker should appear in `/api/stickers/all`.
 Private stickers stay visible only in that user's `/api/stickers/my` list.
+`GET /api/stickers` returns the current user's stickers plus ready public
+stickers from other users, which is the easiest endpoint for a signed-in
+frontend feed.
 
 `POST /api/stickers/from-image` accepts the same request shape. For image
 sources, use `"Mute"` or `"UseMedia"` because images do not have original

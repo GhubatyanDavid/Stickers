@@ -44,10 +44,10 @@ public static class StickerEndpoints
             .Produces<StickerResponse[]>()
             .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized);
 
-        api.MapGet("/stickers", ListMyStickers)
+        api.MapGet("/stickers", ListVisibleStickers)
             .WithName("ListStickers")
-            .WithSummary("List my stickers")
-            .WithDescription("Backward-compatible alias for /api/stickers/my.")
+            .WithSummary("List visible stickers")
+            .WithDescription("Returns stickers owned by the current X-User-Id plus ready public stickers from any user.")
             .Produces<StickerResponse[]>()
             .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized);
 
@@ -59,24 +59,24 @@ public static class StickerEndpoints
 
         api.MapGet("/stickers/{id:guid}", GetSticker)
             .WithName("GetSticker")
-            .WithSummary("Get my sticker")
-            .WithDescription("Returns one sticker if it belongs to the current X-User-Id.")
+            .WithSummary("Get visible sticker")
+            .WithDescription("Returns one sticker if it belongs to the current X-User-Id or is ready and public.")
             .Produces<StickerResponse>()
             .Produces(StatusCodes.Status404NotFound)
             .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized);
 
         api.MapGet("/stickers/{id:guid}/status", GetStickerStatus)
             .WithName("GetStickerStatus")
-            .WithSummary("Get my sticker status")
-            .WithDescription("Returns processing status, output URL, and error message for one sticker owned by the current X-User-Id.")
+            .WithSummary("Get visible sticker status")
+            .WithDescription("Returns status, output URL, and error message for one sticker owned by the current X-User-Id or ready and public.")
             .Produces<StickerStatusResponse>()
             .Produces(StatusCodes.Status404NotFound)
             .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized);
 
         api.MapGet("/stickers/{id:guid}/download", DownloadSticker)
             .WithName("DownloadSticker")
-            .WithSummary("Download my sticker MP4")
-            .WithDescription("Downloads the generated MP4 when the sticker is ready and owned by the current X-User-Id.")
+            .WithSummary("Download visible sticker MP4")
+            .WithDescription("Downloads the generated MP4 when the sticker is owned by the current X-User-Id or ready and public.")
             .Produces(StatusCodes.Status200OK)
             .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized)
             .Produces<ProblemResponse>(StatusCodes.Status404NotFound)
@@ -138,6 +138,15 @@ public static class StickerEndpoints
         return Results.Ok(stickers);
     }
 
+    private static IResult ListVisibleStickers(IMediaRepository repository, ICurrentUser currentUser, ILogger<Program> logger)
+    {
+        var ownerUserId = currentUser.UserId;
+        logger.LogInformation("Visible sticker list requested. OwnerUserId: {OwnerUserId}.", ownerUserId);
+        var stickers = repository.GetVisibleStickersForOwner(ownerUserId).Select(sticker => ToStickerResponse(sticker, repository)).ToArray();
+        logger.LogInformation("Visible sticker list returned. OwnerUserId: {OwnerUserId}. Count: {StickerCount}.", ownerUserId, stickers.Length);
+        return Results.Ok(stickers);
+    }
+
     private static IResult ListAllStickers(IMediaRepository repository, ILogger<Program> logger)
     {
         logger.LogInformation("All public sticker list requested.");
@@ -156,13 +165,13 @@ public static class StickerEndpoints
             return Results.NotFound();
         }
 
-        if (sticker.OwnerUserId != currentUser.UserId)
+        if (!CanReadSticker(sticker, currentUser, out var requestUserId))
         {
             logger.LogWarning(
                 "Sticker request forbidden. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}. RequestUserId: {RequestUserId}.",
                 id,
                 sticker.OwnerUserId,
-                currentUser.UserId);
+                requestUserId);
             return Results.NotFound();
         }
 
@@ -180,13 +189,13 @@ public static class StickerEndpoints
             return Results.NotFound();
         }
 
-        if (sticker.OwnerUserId != currentUser.UserId)
+        if (!CanReadSticker(sticker, currentUser, out var requestUserId))
         {
             logger.LogWarning(
                 "Sticker status forbidden. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}. RequestUserId: {RequestUserId}.",
                 id,
                 sticker.OwnerUserId,
-                currentUser.UserId);
+                requestUserId);
             return Results.NotFound();
         }
 
@@ -479,13 +488,13 @@ public static class StickerEndpoints
             return Results.NotFound(new ProblemResponse("Sticker was not found."));
         }
 
-        if (sticker.OwnerUserId != currentUser.UserId)
+        if (!CanReadSticker(sticker, currentUser, out var requestUserId))
         {
             logger.LogWarning(
                 "Sticker download forbidden. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}. RequestUserId: {RequestUserId}.",
                 id,
                 sticker.OwnerUserId,
-                currentUser.UserId);
+                requestUserId);
             return Results.NotFound(new ProblemResponse("Sticker was not found."));
         }
 
@@ -567,6 +576,18 @@ public static class StickerEndpoints
 
     private static bool IsOutsideMediaDuration(int trimEndMs, MediaFile mediaFile) =>
         mediaFile.Preview?.DurationMs is long durationMs && trimEndMs > durationMs;
+
+    private static bool CanReadSticker(Sticker sticker, ICurrentUser currentUser, out string? requestUserId)
+    {
+        if (sticker is { IsPublic: true, Status: StickerStatus.Ready })
+        {
+            requestUserId = null;
+            return true;
+        }
+
+        requestUserId = currentUser.UserId;
+        return sticker.OwnerUserId == requestUserId;
+    }
 
     private static StickerResponse ToStickerResponse(Sticker sticker, IMediaRepository repository)
     {

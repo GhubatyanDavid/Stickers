@@ -42,8 +42,9 @@ All JSON enum values are serialized as strings.
 - Sticker output is MP4 video.
 - Sticker duration is limited by `Sticker:MaxDurationMs` (`30000` ms in the
   committed app settings).
-- Metadata is stored in memory. Restarting the backend clears media and sticker
-  lists even if files still exist on disk.
+- Media and sticker metadata are stored in PostgreSQL when the default
+  development settings are used. In-memory persistence is only for temporary
+  local testing.
 - Creating a video sticker currently requires source preview duration metadata.
   FFprobe must be configured before uploading video media used for sticker
   creation. Still image stickers do not require source preview duration.
@@ -315,6 +316,10 @@ Optional fields:
 - `audioSourceMediaId`
 - `audioTrimStartMs`
 - `audioTrimEndMs`
+- `isPublic`
+
+Set `"isPublic": true` when the sticker should appear in the public feed after
+processing reaches `Ready`.
 
 #### Original Audio Request
 
@@ -443,7 +448,33 @@ Common sticker validation errors:
 
 Purpose:
 
-- List sticker jobs known to the current backend process.
+- List stickers visible to the current user.
+- Includes all stickers owned by the current `X-User-Id`.
+- Also includes ready public stickers created by any other user.
+
+Success:
+
+- `200 OK`
+- Body: `StickerResponse[]`
+
+### GET /api/stickers/my
+
+Purpose:
+
+- List only stickers owned by the current `X-User-Id`.
+
+Success:
+
+- `200 OK`
+- Body: `StickerResponse[]`
+
+### GET /api/stickers/all
+
+Purpose:
+
+- Public endpoint for the global sticker feed.
+- Returns only stickers that are both `isPublic: true` and `status: "Ready"`.
+- Does not require `X-User-Id`.
 
 Success:
 
@@ -454,7 +485,9 @@ Success:
 
 Purpose:
 
-- Get one sticker job with its full sticker response.
+- Get one visible sticker job with its full sticker response.
+- A sticker is visible when it is owned by the current `X-User-Id` or is ready
+  and public.
 
 Success:
 
@@ -469,7 +502,8 @@ Missing sticker:
 
 Purpose:
 
-- Poll one sticker job during background processing.
+- Poll one owned sticker job during background processing.
+- Ready public stickers from other users can also be read here.
 
 Success:
 

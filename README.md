@@ -108,6 +108,8 @@ GET  /api/media/{id}/file
 POST /api/stickers/from-video
 POST /api/stickers/from-image
 GET  /api/stickers
+GET  /api/stickers/my
+GET  /api/stickers/all
 GET  /api/stickers/{id}
 GET  /api/stickers/{id}/status
 DELETE /api/stickers/{id}
@@ -122,9 +124,15 @@ Create a sticker with the source video's matching audio:
   "sourceMediaId": "uploaded-video-id",
   "trimStartMs": 0,
   "trimEndMs": 5000,
-  "audioMode": "KeepOriginal"
+  "audioMode": "KeepOriginal",
+  "isPublic": true
 }
 ```
+
+Use `GET /api/stickers` for the current user's visible feed: that user's own
+private/public stickers plus every ready public sticker from other users.
+Use `GET /api/stickers/my` when the UI needs only the current user's stickers,
+and `GET /api/stickers/all` for the public-ready list without a user header.
 
 Use one time range for video and a different time range for audio from the same
 video:
