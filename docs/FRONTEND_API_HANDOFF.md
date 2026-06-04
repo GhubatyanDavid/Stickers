@@ -27,19 +27,20 @@ All JSON enum values are serialized as strings.
 - Return preview metadata for audio, video, and GIF files when FFprobe can read
   them.
 - Generate a thumbnail URL for uploaded video and GIF files.
-- Create a moving video sticker job from an uploaded video.
-- Create an image sticker job by looping an uploaded image into MP4.
+- Create a moving sticker job from an uploaded video or GIF.
+- Create an image sticker job by looping an uploaded image into MP4 or GIF.
 - Use matching audio from the source video.
 - Mute the sticker.
 - Use audio from another uploaded audio or video file.
 - Trim video and audio from different time ranges.
 - Process sticker jobs asynchronously with queue/status polling.
-- Serve uploaded files, thumbnails, and generated sticker MP4 files from
+- Serve uploaded files, thumbnails, and generated sticker MP4/GIF files from
   `/media/...`.
 
 ## Current MVP Limits
 
-- Sticker output is MP4 video.
+- Sticker output defaults to MP4 video. GIF output is supported with
+  `audioMode: "Mute"` because GIF files cannot contain audio.
 - Sticker duration is limited by `Sticker:MaxDurationMs` (`30000` ms in the
   committed app settings).
 - Media and sticker metadata are stored in PostgreSQL when the default
@@ -91,6 +92,18 @@ Meaning:
 - `KeepOriginal`: use audio from `sourceMediaId`.
 - `Mute`: create a silent sticker.
 - `UseMedia`: use audio from `audioSourceMediaId`.
+
+### StickerOutputFormat
+
+```text
+Mp4
+Gif
+```
+
+Meaning:
+
+- `Mp4`: export an MP4 video sticker. This is the default when omitted.
+- `Gif`: export a silent looping GIF sticker. Use `audioMode: "Mute"`.
 
 ### StickerStatus
 
@@ -157,6 +170,7 @@ Notes:
   "audioTrimStartMs": 2000,
   "audioTrimEndMs": 7000,
   "durationMs": 5000,
+  "outputFormat": "Mp4",
   "isPublic": false,
   "isFavorite": false,
   "sourceType": "video",
@@ -173,6 +187,7 @@ Notes:
 {
   "id": "59936b11-4a0c-4f62-bc2f-bf6516e23f81",
   "status": "Ready",
+  "outputFormat": "Mp4",
   "errorMessage": null,
   "outputUrl": "/media/stickers/59936b114a0c4f62bc2fbf6516e23f81.mp4"
 }
@@ -290,9 +305,9 @@ Note:
 
 Purpose:
 
-- Queue a sticker export job from an uploaded video or image. This endpoint is
-  backward-compatible with existing clients that already post image sources to
-  the video route.
+- Queue a sticker export job from an uploaded video, GIF, or image. This
+  endpoint is backward-compatible with existing clients that already post image
+  sources to the video route.
 
 Success:
 
@@ -316,6 +331,7 @@ Optional fields:
 - `audioSourceMediaId`
 - `audioTrimStartMs`
 - `audioTrimEndMs`
+- `outputFormat` (`"Mp4"` default, or `"Gif"`)
 - `isPublic`
 
 Set `"isPublic": true` when the sticker should appear in the public feed after
@@ -363,6 +379,20 @@ Use video seconds 7-12 and audio seconds 1-6 from the same source video:
 }
 ```
 
+#### GIF Sticker Request
+
+GIF output is silent and loops forever:
+
+```json
+{
+  "sourceMediaId": "uploaded-video-gif-or-image-id",
+  "trimStartMs": 0,
+  "trimEndMs": 5000,
+  "audioMode": "Mute",
+  "outputFormat": "Gif"
+}
+```
+
 #### Custom Audio Request
 
 Use video seconds 7-12 and another uploaded media item's audio seconds 2-7:
@@ -398,7 +428,7 @@ uploaded audio or video file:
 
 For image sources:
 
-- The image is looped into the generated MP4 for `trimEndMs - trimStartMs`.
+- The image is looped into the generated output for `trimEndMs - trimStartMs`.
 - Use `Mute` or `UseMedia`; `KeepOriginal` is invalid for images.
 - Source preview duration metadata is not required.
 
@@ -422,9 +452,10 @@ Trim validation rules:
 - `trimStartMs` must be `>= 0`.
 - `trimEndMs` must be greater than `trimStartMs`.
 - Sticker duration must not exceed the configured max sticker duration.
-- Video trim end must not exceed source video duration.
+- Video/GIF trim end must not exceed source duration.
 - Non-muted audio trim start/end must be valid.
 - Audio trim end must not exceed its selected audio source duration.
+- GIF output must use `audioMode: "Mute"`.
 
 Audio duration behavior:
 
@@ -435,13 +466,15 @@ Audio duration behavior:
 Common sticker validation errors:
 
 - Source media does not exist.
-- Source media is not video or image.
-- Source or audio preview metadata is unavailable.
+- Source media is not video, GIF, or image.
+- Source video/GIF or audio preview metadata is unavailable.
 - Source video has no audio when `KeepOriginal` is requested.
 - Image source uses `KeepOriginal`.
+- GIF output requested with audio.
 - Audio source does not exist.
 - Audio source has no audio stream.
 - Invalid audio mode.
+- Invalid output format.
 - Invalid trim range.
 
 ### GET /api/stickers

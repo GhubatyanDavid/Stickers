@@ -122,14 +122,14 @@ public sealed class StickerProcessingWorker(
                 return;
             }
 
-            if (sourceMedia.Kind is not (MediaKind.Video or MediaKind.Image))
+            if (sourceMedia.Kind is not (MediaKind.Video or MediaKind.Image or MediaKind.Gif))
             {
                 logger.LogWarning(
                     "Sticker {StickerId} failed because source media {SourceMediaId} has unsupported kind {MediaKind}.",
                     sticker.Id,
                     sourceMedia.Id,
                     sourceMedia.Kind);
-                sticker.MarkFailed("Only video and image source media are supported by this processor.");
+                sticker.MarkFailed("Only video, GIF, and image source media are supported by this processor.");
                 repository.UpdateSticker(sticker);
                 return;
             }

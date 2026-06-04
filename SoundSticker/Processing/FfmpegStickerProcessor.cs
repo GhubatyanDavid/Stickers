@@ -26,14 +26,15 @@ public sealed class FfmpegStickerProcessor(
         var stickersDirectory = Path.Combine(storageRoot, storageOptions.Value.StickersPath);
         Directory.CreateDirectory(stickersDirectory);
 
-        var outputFileName = $"{sticker.Id:N}.mp4";
+        var outputFileName = $"{sticker.Id:N}{GetOutputExtension(sticker.OutputFormat)}";
         var outputRelativePath = Path.Combine(storageOptions.Value.StickersPath, outputFileName);
         var outputPath = Path.Combine(storageRoot, outputRelativePath);
         logger.LogInformation(
-            "FFmpeg sticker processing command preparing. StickerId: {StickerId}. SourceMediaId: {SourceMediaId}. AudioSourceMediaId: {AudioSourceMediaId}. OutputRelativePath: {OutputRelativePath}. TrimStartMs: {TrimStartMs}. DurationMs: {DurationMs}.",
+            "FFmpeg sticker processing command preparing. StickerId: {StickerId}. SourceMediaId: {SourceMediaId}. AudioSourceMediaId: {AudioSourceMediaId}. OutputFormat: {OutputFormat}. OutputRelativePath: {OutputRelativePath}. TrimStartMs: {TrimStartMs}. DurationMs: {DurationMs}.",
             sticker.Id,
             sourceMedia.Id,
             audioSourceMedia?.Id,
+            sticker.OutputFormat,
             outputRelativePath,
             sticker.TrimStartMs,
             sticker.DurationMs);
@@ -70,7 +71,7 @@ public sealed class FfmpegStickerProcessor(
         startInfo.ArgumentList.Add("-i");
         startInfo.ArgumentList.Add(sourcePath);
 
-        if (audioSourceMedia is not null)
+        if (audioSourceMedia is not null && sticker.OutputFormat == StickerOutputFormat.Mp4)
         {
             startInfo.ArgumentList.Add("-ss");
             startInfo.ArgumentList.Add(ToSeconds(sticker.AudioTrimStartMs));
@@ -85,33 +86,45 @@ public sealed class FfmpegStickerProcessor(
         startInfo.ArgumentList.Add("-map");
         startInfo.ArgumentList.Add("[v]");
 
-        if (sticker.AudioMode == StickerAudioMode.Mute)
+        if (sticker.OutputFormat == StickerOutputFormat.Gif)
         {
             startInfo.ArgumentList.Add("-an");
+            startInfo.ArgumentList.Add("-loop");
+            startInfo.ArgumentList.Add("0");
+            startInfo.ArgumentList.Add("-t");
+            startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
         }
         else
         {
-            startInfo.ArgumentList.Add("-map");
-            startInfo.ArgumentList.Add("[a]");
-            startInfo.ArgumentList.Add("-c:a");
-            startInfo.ArgumentList.Add("aac");
-            startInfo.ArgumentList.Add("-b:a");
-            startInfo.ArgumentList.Add("96k");
+            if (sticker.AudioMode == StickerAudioMode.Mute)
+            {
+                startInfo.ArgumentList.Add("-an");
+            }
+            else
+            {
+                startInfo.ArgumentList.Add("-map");
+                startInfo.ArgumentList.Add("[a]");
+                startInfo.ArgumentList.Add("-c:a");
+                startInfo.ArgumentList.Add("aac");
+                startInfo.ArgumentList.Add("-b:a");
+                startInfo.ArgumentList.Add("96k");
+            }
+
+            startInfo.ArgumentList.Add("-c:v");
+            startInfo.ArgumentList.Add("libx264");
+            startInfo.ArgumentList.Add("-preset");
+            startInfo.ArgumentList.Add(string.IsNullOrWhiteSpace(options.VideoPreset) ? "ultrafast" : options.VideoPreset);
+            startInfo.ArgumentList.Add("-crf");
+            startInfo.ArgumentList.Add("30");
+            startInfo.ArgumentList.Add("-pix_fmt");
+            startInfo.ArgumentList.Add("yuv420p");
+            startInfo.ArgumentList.Add("-movflags");
+            startInfo.ArgumentList.Add("+faststart");
+            startInfo.ArgumentList.Add("-t");
+            startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
+            startInfo.ArgumentList.Add("-shortest");
         }
 
-        startInfo.ArgumentList.Add("-c:v");
-        startInfo.ArgumentList.Add("libx264");
-        startInfo.ArgumentList.Add("-preset");
-        startInfo.ArgumentList.Add(string.IsNullOrWhiteSpace(options.VideoPreset) ? "ultrafast" : options.VideoPreset);
-        startInfo.ArgumentList.Add("-crf");
-        startInfo.ArgumentList.Add("30");
-        startInfo.ArgumentList.Add("-pix_fmt");
-        startInfo.ArgumentList.Add("yuv420p");
-        startInfo.ArgumentList.Add("-movflags");
-        startInfo.ArgumentList.Add("+faststart");
-        startInfo.ArgumentList.Add("-t");
-        startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
-        startInfo.ArgumentList.Add("-shortest");
         startInfo.ArgumentList.Add(outputPath);
 
         using var timeout = new CancellationTokenSource(GetProcessingTimeout());
@@ -202,6 +215,15 @@ public sealed class FfmpegStickerProcessor(
 
     private static string BuildFilterGraph(Sticker sticker, MediaKind sourceKind, StickerOptions options)
     {
+        return sticker.OutputFormat switch
+        {
+            StickerOutputFormat.Gif => BuildGifFilterGraph(sticker, options),
+            _ => BuildMp4FilterGraph(sticker, sourceKind, options)
+        };
+    }
+
+    private static string BuildMp4FilterGraph(Sticker sticker, MediaKind sourceKind, StickerOptions options)
+    {
         var fps = GetOutputFps(options);
         var maxDimension = GetMaxOutputDimension(options);
         var videoDuration = ToSeconds(sticker.DurationMs);
@@ -224,6 +246,19 @@ public sealed class FfmpegStickerProcessor(
         return $"{videoFilter};{audioFilter}";
     }
 
+    private static string BuildGifFilterGraph(Sticker sticker, StickerOptions options)
+    {
+        var fps = GetOutputFps(options);
+        var maxDimension = GetMaxOutputDimension(options);
+        var videoDuration = ToSeconds(sticker.DurationMs);
+        var videoScale = $"scale={maxDimension}:{maxDimension}:force_original_aspect_ratio=decrease";
+
+        return
+            $"[0:v:0]fps={fps},{videoScale},setsar=1,trim=duration={videoDuration},setpts=PTS-STARTPTS,split[gif_frames][palette_source];" +
+            "[palette_source]palettegen=stats_mode=diff[palette];" +
+            "[gif_frames][palette]paletteuse=dither=sierra2_4a[v]";
+    }
+
     private static string ToSeconds(int milliseconds) =>
         (milliseconds / 1000d).ToString("0.###", CultureInfo.InvariantCulture);
 
@@ -235,4 +270,11 @@ public sealed class FfmpegStickerProcessor(
 
     private static int GetMaxOutputDimension(StickerOptions options) =>
         Math.Clamp(options.MaxOutputDimension, 128, 1280);
+
+    private static string GetOutputExtension(StickerOutputFormat outputFormat) =>
+        outputFormat switch
+        {
+            StickerOutputFormat.Gif => ".gif",
+            _ => ".mp4"
+        };
 }

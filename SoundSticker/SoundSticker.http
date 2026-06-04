@@ -35,6 +35,19 @@ Content-Type: application/json
 
 {
   "sourceMediaId": "{{MediaId}}",
+  "trimStartMs": 0,
+  "trimEndMs": 5000,
+  "audioMode": "Mute",
+  "outputFormat": "Gif"
+}
+
+###
+
+POST {{SoundSticker_HostAddress}}/api/stickers/from-video
+Content-Type: application/json
+
+{
+  "sourceMediaId": "{{MediaId}}",
   "trimStartMs": 7000,
   "trimEndMs": 12000,
   "audioMode": "UseMedia",

@@ -8,14 +8,14 @@ ASP.NET Core backend for the sound sticker MVP.
 - Return preview metadata for timeline controls after upload.
 - Store uploaded media under `storage/originals`.
 - Store media and sticker metadata in PostgreSQL.
-- Create a moving video sticker job from an uploaded video.
-- Create an image sticker job from an uploaded image by looping it into MP4.
+- Create a moving sticker job from an uploaded video or GIF.
+- Create an image sticker job from an uploaded image by looping it into MP4 or GIF.
 - Keep original video audio, mute it, or use audio from another uploaded audio/video file.
 - Trim video and audio tracks from different time ranges.
 - Process sticker jobs in a background worker.
-- Save generated MP4 stickers under `storage/stickers`.
+- Save generated MP4/GIF stickers under `storage/stickers`.
 - Mark stickers as private or public during creation.
-- Delete old or failed sticker jobs and their generated MP4 files.
+- Delete old or failed sticker jobs and their generated MP4/GIF files.
 - Serve local media files from `/media`.
 
 ## Run locally
@@ -101,11 +101,14 @@ DELETE /api/stickers/{id}                 X-User-Id required
   "trimStartMs": 0,
   "trimEndMs": 5000,
   "audioMode": "KeepOriginal",
+  "outputFormat": "Mp4",
   "isPublic": false
 }
 ```
 
 Use `"Mute"` for silent stickers.
+Use `"outputFormat": "Gif"` with `"audioMode": "Mute"` to export a silent
+looping GIF. If `outputFormat` is omitted, the backend exports MP4.
 Use `"isPublic": true` when the sticker should appear in `/api/stickers/all`.
 Private stickers stay visible only in that user's `/api/stickers/my` list.
 `GET /api/stickers` returns the current user's stickers plus ready public
@@ -114,7 +117,8 @@ frontend feed.
 
 `POST /api/stickers/from-image` accepts the same request shape. For image
 sources, use `"Mute"` or `"UseMedia"` because images do not have original
-audio. The image is looped for `trimEndMs - trimStartMs` and exported as MP4.
+audio. The image is looped for `trimEndMs - trimStartMs` and exported as MP4 or
+GIF depending on `outputFormat`.
 
 Uploaded audio, video, and GIF responses include a `preview` block when FFprobe
 can read duration and stream information. Video and GIF previews also include a

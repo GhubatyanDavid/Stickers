@@ -14,6 +14,7 @@ public sealed record StickerResponse(
     int AudioTrimStartMs,
     int AudioTrimEndMs,
     int DurationMs,
+    StickerOutputFormat OutputFormat,
     bool IsPublic,
     bool IsFavorite,
     string SourceType,
@@ -35,6 +36,7 @@ public sealed record StickerResponse(
             sticker.AudioTrimStartMs,
             sticker.AudioTrimEndMs,
             sticker.DurationMs,
+            sticker.OutputFormat,
             sticker.IsPublic,
             false,
             GetSourceType(sourceKind),
@@ -44,5 +46,10 @@ public sealed record StickerResponse(
             sticker.CompletedAt);
 
     private static string GetSourceType(MediaKind sourceKind) =>
-        sourceKind == MediaKind.Image ? "image" : "video";
+        sourceKind switch
+        {
+            MediaKind.Image => "image",
+            MediaKind.Gif => "gif",
+            _ => "video"
+        };
 }

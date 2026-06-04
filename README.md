@@ -4,7 +4,7 @@ Backend playground for creating short sound stickers from uploaded media.
 
 `SoundSticker` is an ASP.NET Core MVP that accepts local media uploads, stores
 them on disk, and uses FFmpeg in a background worker to build short MP4 sticker
-clips. Stickers can be moving video clips or looped image-based clips with
+clips or silent GIFs. Stickers can be moving video/GIF clips or looped image-based clips with
 optional audio. Video and audio can be trimmed independently, so a sticker can
 keep its original audio, become silent, or use audio from another uploaded audio
 or video file.
@@ -18,7 +18,8 @@ or video file.
 - Create video and image sticker jobs with a maximum duration of 30 seconds.
 - Trim the video track and audio track from different time ranges.
 - Reuse audio from the source video or attach audio from another uploaded file.
-- Loop still images into generated MP4 stickers.
+- Loop still images into generated MP4 or GIF stickers.
+- Export silent looping GIF stickers with `outputFormat: "Gif"`.
 - Process stickers asynchronously and query their status.
 - Serve generated sticker files through the local `/media` path.
 - Explore the API through Swagger during development.
@@ -125,6 +126,7 @@ Create a sticker with the source video's matching audio:
   "trimStartMs": 0,
   "trimEndMs": 5000,
   "audioMode": "KeepOriginal",
+  "outputFormat": "Mp4",
   "isPublic": true
 }
 ```
@@ -133,6 +135,8 @@ Use `GET /api/stickers` for the current user's visible feed: that user's own
 private/public stickers plus every ready public sticker from other users.
 Use `GET /api/stickers/my` when the UI needs only the current user's stickers,
 and `GET /api/stickers/all` for the public-ready list without a user header.
+Omit `outputFormat` for MP4, or send `"outputFormat": "Gif"` with
+`"audioMode": "Mute"` for a silent looping GIF.
 
 Use one time range for video and a different time range for audio from the same
 video:
@@ -216,6 +220,7 @@ selected audio clip is shorter, the rest of the sticker stays silent.
 - Media and sticker metadata are stored in PostgreSQL.
 - On startup the API can create the required `media_files` and `stickers`
   tables when `Persistence:AutoCreateSchema` is enabled.
-- Deleting a sticker removes its database job record and generated MP4 file
+- Deleting a sticker removes its database job record and generated MP4/GIF file
   when one exists.
-- Sticker export currently produces MP4 video output.
+- Sticker export defaults to MP4 video output and can also produce silent GIF
+  output.

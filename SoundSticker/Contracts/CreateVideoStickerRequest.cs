@@ -8,6 +8,7 @@ public sealed record CreateVideoStickerRequest(
     int TrimStartMs,
     int TrimEndMs,
     StickerAudioMode AudioMode,
+    StickerOutputFormat OutputFormat = StickerOutputFormat.Mp4,
     Guid? AudioSourceMediaId = null,
     int? AudioTrimStartMs = null,
     int? AudioTrimEndMs = null,

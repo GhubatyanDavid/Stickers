@@ -33,6 +33,7 @@ public sealed class PostgreSqlSchemaInitializer(
                 cover_image_id uuid NULL REFERENCES media_files(id) ON DELETE SET NULL,
                 audio_source_media_id uuid NULL REFERENCES media_files(id) ON DELETE SET NULL,
                 audio_mode integer NOT NULL,
+                output_format integer NOT NULL DEFAULT 0,
                 trim_start_ms integer NOT NULL,
                 trim_end_ms integer NOT NULL,
                 audio_trim_start_ms integer NOT NULL,
@@ -55,6 +56,9 @@ public sealed class PostgreSqlSchemaInitializer(
 
             ALTER TABLE stickers
                 ADD COLUMN IF NOT EXISTS is_public boolean NOT NULL DEFAULT false;
+
+            ALTER TABLE stickers
+                ADD COLUMN IF NOT EXISTS output_format integer NOT NULL DEFAULT 0;
 
             CREATE INDEX IF NOT EXISTS ix_media_files_created_at ON media_files (created_at DESC);
             CREATE INDEX IF NOT EXISTS ix_media_files_owner_created_at ON media_files (owner_user_id, created_at DESC);

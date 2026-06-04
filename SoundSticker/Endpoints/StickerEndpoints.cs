@@ -17,7 +17,7 @@ public static class StickerEndpoints
             .RequireRateLimiting("sticker-creation")
             .WithName("CreateVideoSticker")
             .WithSummary("Create video sticker")
-            .WithDescription("Queues sticker processing from an uploaded video. Set isPublic=true to show it in All Stickers after processing.")
+            .WithDescription("Queues sticker processing from an uploaded video, GIF, or image. Set outputFormat=Gif for silent GIF output. Set isPublic=true to show it in All Stickers after processing.")
             .Accepts<CreateVideoStickerRequest>("application/json")
             .Produces<StickerResponse>(StatusCodes.Status202Accepted)
             .Produces<ProblemResponse>(StatusCodes.Status400BadRequest)
@@ -29,7 +29,7 @@ public static class StickerEndpoints
             .RequireRateLimiting("sticker-creation")
             .WithName("CreateImageSticker")
             .WithSummary("Create image sticker")
-            .WithDescription("Queues sticker processing from an uploaded image by looping it into MP4. Use Mute or UseMedia audio mode.")
+            .WithDescription("Queues sticker processing from an uploaded image by looping it into MP4 or GIF. Use Mute or UseMedia audio mode.")
             .Accepts<CreateVideoStickerRequest>("application/json")
             .Produces<StickerResponse>(StatusCodes.Status202Accepted)
             .Produces<ProblemResponse>(StatusCodes.Status400BadRequest)
@@ -75,8 +75,8 @@ public static class StickerEndpoints
 
         api.MapGet("/stickers/{id:guid}/download", DownloadSticker)
             .WithName("DownloadSticker")
-            .WithSummary("Download visible sticker MP4")
-            .WithDescription("Downloads the generated MP4 when the sticker is owned by the current X-User-Id or ready and public.")
+            .WithSummary("Download visible sticker output")
+            .WithDescription("Downloads the generated MP4 or GIF when the sticker is owned by the current X-User-Id or ready and public.")
             .Produces(StatusCodes.Status200OK)
             .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized)
             .Produces<ProblemResponse>(StatusCodes.Status404NotFound)
@@ -205,7 +205,7 @@ public static class StickerEndpoints
             sticker.Status,
             sticker.OutputUrl,
             sticker.ErrorMessage);
-        return Results.Ok(new StickerStatusResponse(sticker.Id, sticker.Status, sticker.ErrorMessage, sticker.OutputUrl));
+        return Results.Ok(new StickerStatusResponse(sticker.Id, sticker.Status, sticker.OutputFormat, sticker.ErrorMessage, sticker.OutputUrl));
     }
 
     private static async Task<IResult> CreateStickerAsync(
@@ -219,11 +219,12 @@ public static class StickerEndpoints
         CancellationToken cancellationToken)
     {
         logger.LogInformation(
-            "Sticker creation requested. SourceMediaId: {SourceMediaId}. CoverImageId: {CoverImageId}. AudioSourceMediaId: {AudioSourceMediaId}. AudioMode: {AudioMode}. TrimStartMs: {TrimStartMs}. TrimEndMs: {TrimEndMs}. IsPublic: {IsPublic}.",
+            "Sticker creation requested. SourceMediaId: {SourceMediaId}. CoverImageId: {CoverImageId}. AudioSourceMediaId: {AudioSourceMediaId}. AudioMode: {AudioMode}. OutputFormat: {OutputFormat}. TrimStartMs: {TrimStartMs}. TrimEndMs: {TrimEndMs}. IsPublic: {IsPublic}.",
             request.SourceMediaId,
             request.CoverImageId,
             request.AudioSourceMediaId,
             request.AudioMode,
+            request.OutputFormat,
             request.TrimStartMs,
             request.TrimEndMs,
             request.IsPublic);
@@ -289,6 +290,7 @@ public static class StickerEndpoints
             audioTrimStartMs,
             audioTrimEndMs,
             audioMode,
+            request.OutputFormat,
             ownerUserId,
             request.IsPublic);
 
@@ -314,14 +316,14 @@ public static class StickerEndpoints
             return Results.BadRequest(new ProblemResponse($"Source media must be an {requiredSourceKind.Value.ToString().ToLowerInvariant()}."));
         }
 
-        if (sourceMedia.Kind is not (MediaKind.Video or MediaKind.Image))
+        if (sourceMedia.Kind is not (MediaKind.Video or MediaKind.Image or MediaKind.Gif))
         {
-            return Results.BadRequest(new ProblemResponse("Source media must be a video or image."));
+            return Results.BadRequest(new ProblemResponse("Source media must be a video, GIF, or image."));
         }
 
-        if (sourceMedia.Kind == MediaKind.Video && !HasUsablePreview(sourceMedia))
+        if (sourceMedia.Kind is (MediaKind.Video or MediaKind.Gif) && !HasUsablePreview(sourceMedia))
         {
-            return Results.BadRequest(new ProblemResponse("Source video preview metadata is unavailable. Check FFprobe and upload the file again."));
+            return Results.BadRequest(new ProblemResponse("Source video or GIF preview metadata is unavailable. Check FFprobe and upload the file again."));
         }
 
         if (request.TrimStartMs < 0 || request.TrimEndMs <= request.TrimStartMs)
@@ -335,14 +337,24 @@ public static class StickerEndpoints
             return Results.BadRequest(new ProblemResponse($"Sticker can be at most {stickerOptions.MaxDurationMs} ms."));
         }
 
-        if (sourceMedia.Kind == MediaKind.Video && IsOutsideMediaDuration(request.TrimEndMs, sourceMedia))
+        if (sourceMedia.Kind is (MediaKind.Video or MediaKind.Gif) && IsOutsideMediaDuration(request.TrimEndMs, sourceMedia))
         {
-            return Results.BadRequest(new ProblemResponse("Video trim range exceeds the source video duration."));
+            return Results.BadRequest(new ProblemResponse("Trim range exceeds the source video or GIF duration."));
         }
 
         if (!Enum.IsDefined(request.AudioMode))
         {
             return Results.BadRequest(new ProblemResponse("Audio mode is invalid."));
+        }
+
+        if (!Enum.IsDefined(request.OutputFormat))
+        {
+            return Results.BadRequest(new ProblemResponse("Output format is invalid."));
+        }
+
+        if (request.OutputFormat == StickerOutputFormat.Gif && request.AudioMode != StickerAudioMode.Mute)
+        {
+            return Results.BadRequest(new ProblemResponse("GIF output does not support audio. Use Mute audio mode."));
         }
 
         return null;
@@ -516,7 +528,7 @@ public static class StickerEndpoints
         }
 
         logger.LogInformation("Sticker download started. StickerId: {StickerId}. FullPath: {FullPath}.", id, fullPath);
-        return Results.File(fullPath, "video/mp4", $"{id:N}.mp4");
+        return Results.File(fullPath, GetOutputContentType(sticker.OutputFormat), $"{id:N}{GetOutputExtension(sticker.OutputFormat)}");
     }
 
     private static IResult DeleteSticker(
@@ -573,6 +585,20 @@ public static class StickerEndpoints
 
     private static bool HasUsablePreview(MediaFile mediaFile) =>
         mediaFile.Preview?.DurationMs is > 0;
+
+    private static string GetOutputContentType(StickerOutputFormat outputFormat) =>
+        outputFormat switch
+        {
+            StickerOutputFormat.Gif => "image/gif",
+            _ => "video/mp4"
+        };
+
+    private static string GetOutputExtension(StickerOutputFormat outputFormat) =>
+        outputFormat switch
+        {
+            StickerOutputFormat.Gif => ".gif",
+            _ => ".mp4"
+        };
 
     private static bool IsOutsideMediaDuration(int trimEndMs, MediaFile mediaFile) =>
         mediaFile.Preview?.DurationMs is long durationMs && trimEndMs > durationMs;

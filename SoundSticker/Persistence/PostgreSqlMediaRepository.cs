@@ -30,6 +30,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
         cover_image_id,
         audio_source_media_id,
         audio_mode,
+        output_format,
         trim_start_ms,
         trim_end_ms,
         audio_trim_start_ms,
@@ -151,6 +152,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
                 cover_image_id,
                 audio_source_media_id,
                 audio_mode,
+                output_format,
                 trim_start_ms,
                 trim_end_ms,
                 audio_trim_start_ms,
@@ -170,6 +172,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
                 @cover_image_id,
                 @audio_source_media_id,
                 @audio_mode,
+                @output_format,
                 @trim_start_ms,
                 @trim_end_ms,
                 @audio_trim_start_ms,
@@ -188,6 +191,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
                 cover_image_id = EXCLUDED.cover_image_id,
                 audio_source_media_id = EXCLUDED.audio_source_media_id,
                 audio_mode = EXCLUDED.audio_mode,
+                output_format = EXCLUDED.output_format,
                 trim_start_ms = EXCLUDED.trim_start_ms,
                 trim_end_ms = EXCLUDED.trim_end_ms,
                 audio_trim_start_ms = EXCLUDED.audio_trim_start_ms,
@@ -323,6 +327,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
         AddNullableGuid(command, "cover_image_id", sticker.CoverImageId);
         AddNullableGuid(command, "audio_source_media_id", sticker.AudioSourceMediaId);
         AddInteger(command, "audio_mode", (int)sticker.AudioMode);
+        AddInteger(command, "output_format", (int)sticker.OutputFormat);
         AddInteger(command, "trim_start_ms", sticker.TrimStartMs);
         AddInteger(command, "trim_end_ms", sticker.TrimEndMs);
         AddInteger(command, "audio_trim_start_ms", sticker.AudioTrimStartMs);
@@ -370,6 +375,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
             GetNullableGuid(reader, "cover_image_id"),
             GetNullableGuid(reader, "audio_source_media_id"),
             (StickerAudioMode)GetInt32(reader, "audio_mode"),
+            (StickerOutputFormat)GetInt32(reader, "output_format"),
             GetInt32(reader, "trim_start_ms"),
             GetInt32(reader, "trim_end_ms"),
             GetInt32(reader, "audio_trim_start_ms"),

@@ -16,7 +16,7 @@ public sealed class StoredFileManager(
             return;
         }
 
-        var predictableOutputPath = Path.Combine(storageOptions.Value.StickersPath, $"{sticker.Id:N}.mp4");
+        var predictableOutputPath = Path.Combine(storageOptions.Value.StickersPath, $"{sticker.Id:N}{GetOutputExtension(sticker.OutputFormat)}");
         logger.LogInformation(
             "Sticker output path is empty, deleting predictable processing output path. StickerId: {StickerId}. RelativePath: {RelativePath}.",
             sticker.Id,
@@ -66,4 +66,11 @@ public sealed class StoredFileManager(
         var normalizedDirectory = Path.TrimEndingDirectorySeparator(directory) + Path.DirectorySeparatorChar;
         return path.StartsWith(normalizedDirectory, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string GetOutputExtension(StickerOutputFormat outputFormat) =>
+        outputFormat switch
+        {
+            StickerOutputFormat.Gif => ".gif",
+            _ => ".mp4"
+        };
 }
