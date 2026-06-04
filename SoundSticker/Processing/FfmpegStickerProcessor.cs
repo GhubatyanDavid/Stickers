@@ -300,7 +300,7 @@ public sealed class FfmpegStickerProcessor(
         };
 
     private static string BuildCircleAlphaMask() =>
-        "geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte(pow(X-W/2,2)+pow(Y-H/2,2),pow(W/2,2)),a(X,Y),0)'";
+        "geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte(pow(X-W/2,2)+pow(Y-H/2,2),pow(W/2,2)),alpha(X,Y),0)'";
 
     private static string BuildBackgroundRemovalFilter(Sticker sticker)
     {
