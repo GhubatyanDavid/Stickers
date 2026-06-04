@@ -141,6 +141,11 @@ Omit `outputFormat` for MP4, or send `"outputFormat": "Gif"` with
 `"audioMode": "Mute"` for a silent looping GIF.
 Omit `shape` for the source aspect ratio, or send `"Square"`, `"Circle"`,
 `"Portrait"`, or `"Landscape"`; circle output should be a muted GIF.
+`DELETE /api/stickers/{id}` returns `{ "isDelete": true }` for the current
+user's deleted sticker and `{ "isDelete": false }` when it is missing or belongs
+to another user.
+Sticker list/get responses also include `isDelete`; the frontend can show the
+delete button only when that value is `true`.
 
 Use one time range for video and a different time range for audio from the same
 video:

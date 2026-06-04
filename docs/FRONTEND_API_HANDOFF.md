@@ -195,6 +195,7 @@ Notes:
   "shape": "Original",
   "isPublic": false,
   "isFavorite": false,
+  "isDelete": true,
   "sourceType": "video",
   "outputUrl": null,
   "errorMessage": null,
@@ -202,6 +203,13 @@ Notes:
   "completedAt": null
 }
 ```
+
+Notes:
+
+- `isDelete: true` means the current `X-User-Id` owns this sticker and the UI
+  can show a delete button.
+- `isDelete: false` means the sticker is visible but cannot be deleted by the
+  current viewer.
 
 ### StickerStatusResponse
 
@@ -215,6 +223,21 @@ Notes:
   "outputUrl": "/media/stickers/59936b114a0c4f62bc2fbf6516e23f81.mp4"
 }
 ```
+
+### DeleteStickerResponse
+
+```json
+{
+  "isDelete": true
+}
+```
+
+Notes:
+
+- `isDelete: true` means the sticker belonged to the current user and was
+  deleted.
+- `isDelete: false` means the sticker was missing or did not belong to the
+  current user.
 
 ## Endpoints
 
@@ -546,6 +569,10 @@ Success:
 - `200 OK`
 - Body: `StickerResponse[]`
 
+Delete button rule:
+
+- Show delete controls when a sticker item has `isDelete: true`.
+
 ### GET /api/stickers/my
 
 Purpose:
@@ -556,6 +583,10 @@ Success:
 
 - `200 OK`
 - Body: `StickerResponse[]`
+
+Delete button rule:
+
+- All returned stickers belong to the current user, so `isDelete` is `true`.
 
 ### GET /api/stickers/all
 
@@ -570,6 +601,10 @@ Success:
 - `200 OK`
 - Body: `StickerResponse[]`
 
+Delete button rule:
+
+- This public endpoint has no current user context, so `isDelete` is `false`.
+
 ### GET /api/stickers/{id}
 
 Purpose:
@@ -582,6 +617,10 @@ Success:
 
 - `200 OK`
 - Body: `StickerResponse`
+
+Delete button rule:
+
+- Show delete controls when the returned sticker has `isDelete: true`.
 
 Missing sticker:
 
@@ -609,6 +648,23 @@ Recommended polling behavior:
 - Stop polling when status is `Ready` or `Failed`.
 - When `Ready`, use `outputUrl`.
 - When `Failed`, show `errorMessage`.
+
+### DELETE /api/stickers/{id}
+
+Purpose:
+
+- Delete a sticker only if it belongs to the current `X-User-Id`.
+- If the sticker is processing, the backend requests cancellation first.
+
+Success:
+
+- `200 OK`
+- Body: `DeleteStickerResponse`
+
+Response behavior:
+
+- Owned sticker deleted: `{ "isDelete": true }`
+- Missing sticker or another user's sticker: `{ "isDelete": false }`
 
 ## Frontend UI Notes
 

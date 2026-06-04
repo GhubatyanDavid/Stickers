@@ -91,7 +91,7 @@ GET  /api/stickers/all                    public ready stickers only
 GET  /api/stickers/{id}                   owned or ready public sticker
 GET  /api/stickers/{id}/status            owned or ready public sticker
 GET  /api/stickers/{id}/download          owned or ready public sticker
-DELETE /api/stickers/{id}                 X-User-Id required
+DELETE /api/stickers/{id}                 X-User-Id required, returns isDelete
 ```
 
 ## Create video sticker request
@@ -120,11 +120,17 @@ Private stickers stay visible only in that user's `/api/stickers/my` list.
 `GET /api/stickers` returns the current user's stickers plus ready public
 stickers from other users, which is the easiest endpoint for a signed-in
 frontend feed.
+Sticker responses include `isDelete`; show the delete button only when it is
+`true`.
 
 `POST /api/stickers/from-image` accepts the same request shape. For image
 sources, use `"Mute"` or `"UseMedia"` because images do not have original
 audio. The image is looped for `trimEndMs - trimStartMs` and exported as MP4 or
 GIF depending on `outputFormat`.
+
+`DELETE /api/stickers/{id}` returns `{ "isDelete": true }` when the sticker
+belonged to the current user and was deleted. It returns `{ "isDelete": false }`
+when the sticker is missing or belongs to another user.
 
 Uploaded audio, video, and GIF responses include a `preview` block when FFprobe
 can read duration and stream information. Video and GIF previews also include a

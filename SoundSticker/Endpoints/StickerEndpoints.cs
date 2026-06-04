@@ -85,9 +85,8 @@ public static class StickerEndpoints
         api.MapDelete("/stickers/{id:guid}", DeleteSticker)
             .WithName("DeleteSticker")
             .WithSummary("Delete my sticker")
-            .WithDescription("Deletes a sticker owned by the current X-User-Id. If it is processing, the job is canceled first.")
-            .Produces(StatusCodes.Status204NoContent)
-            .Produces(StatusCodes.Status404NotFound)
+            .WithDescription("Deletes a sticker owned by the current X-User-Id. Returns isDelete=true when deleted and false when the sticker is missing or belongs to another user.")
+            .Produces<DeleteStickerResponse>()
             .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized);
 
         return api;
@@ -133,7 +132,7 @@ public static class StickerEndpoints
     {
         var ownerUserId = currentUser.UserId;
         logger.LogInformation("My sticker list requested. OwnerUserId: {OwnerUserId}.", ownerUserId);
-        var stickers = repository.GetStickersByOwner(ownerUserId).Select(sticker => ToStickerResponse(sticker, repository)).ToArray();
+        var stickers = repository.GetStickersByOwner(ownerUserId).Select(sticker => ToStickerResponse(sticker, repository, ownerUserId)).ToArray();
         logger.LogInformation("My sticker list returned. OwnerUserId: {OwnerUserId}. Count: {StickerCount}.", ownerUserId, stickers.Length);
         return Results.Ok(stickers);
     }
@@ -142,7 +141,7 @@ public static class StickerEndpoints
     {
         var ownerUserId = currentUser.UserId;
         logger.LogInformation("Visible sticker list requested. OwnerUserId: {OwnerUserId}.", ownerUserId);
-        var stickers = repository.GetVisibleStickersForOwner(ownerUserId).Select(sticker => ToStickerResponse(sticker, repository)).ToArray();
+        var stickers = repository.GetVisibleStickersForOwner(ownerUserId).Select(sticker => ToStickerResponse(sticker, repository, ownerUserId)).ToArray();
         logger.LogInformation("Visible sticker list returned. OwnerUserId: {OwnerUserId}. Count: {StickerCount}.", ownerUserId, stickers.Length);
         return Results.Ok(stickers);
     }
@@ -150,7 +149,7 @@ public static class StickerEndpoints
     private static IResult ListAllStickers(IMediaRepository repository, ILogger<Program> logger)
     {
         logger.LogInformation("All public sticker list requested.");
-        var stickers = repository.GetPublicStickers().Select(sticker => ToStickerResponse(sticker, repository)).ToArray();
+        var stickers = repository.GetPublicStickers().Select(sticker => ToStickerResponse(sticker, repository, currentUserId: null)).ToArray();
         logger.LogInformation("All public sticker list returned. Count: {StickerCount}.", stickers.Length);
         return Results.Ok(stickers);
     }
@@ -176,7 +175,7 @@ public static class StickerEndpoints
         }
 
         logger.LogInformation("Sticker returned. StickerId: {StickerId}. Status: {StickerStatus}. OutputUrl: {OutputUrl}.", id, sticker.Status, sticker.OutputUrl);
-        return Results.Ok(ToStickerResponse(sticker, repository));
+        return Results.Ok(ToStickerResponse(sticker, repository, requestUserId));
     }
 
     private static IResult GetStickerStatus(Guid id, IMediaRepository repository, ICurrentUser currentUser, ILogger<Program> logger)
@@ -304,7 +303,7 @@ public static class StickerEndpoints
             sticker.SourceMediaId,
             sticker.IsPublic);
 
-        return Results.Accepted($"/api/stickers/{sticker.Id}", StickerResponse.FromDomain(sticker, sourceMedia.Kind));
+        return Results.Accepted($"/api/stickers/{sticker.Id}", StickerResponse.FromDomain(sticker, sourceMedia.Kind, isDelete: true));
     }
 
     private static IResult? ValidateSource(
@@ -557,7 +556,7 @@ public static class StickerEndpoints
         if (existingSticker is null)
         {
             logger.LogWarning("Sticker delete skipped because sticker was not found. StickerId: {StickerId}.", id);
-            return Results.NotFound();
+            return Results.Ok(new DeleteStickerResponse(false));
         }
 
         if (existingSticker.OwnerUserId != currentUser.UserId)
@@ -567,7 +566,7 @@ public static class StickerEndpoints
                 id,
                 existingSticker.OwnerUserId,
                 currentUser.UserId);
-            return Results.NotFound();
+            return Results.Ok(new DeleteStickerResponse(false));
         }
 
         if (existingSticker.Status == StickerStatus.Processing)
@@ -584,7 +583,7 @@ public static class StickerEndpoints
         if (removedSticker is null)
         {
             logger.LogWarning("Sticker delete skipped because remove returned null. StickerId: {StickerId}.", id);
-            return Results.NotFound();
+            return Results.Ok(new DeleteStickerResponse(false));
         }
 
         storedFileManager.DeleteStickerOutputFile(removedSticker, logger);
@@ -592,7 +591,7 @@ public static class StickerEndpoints
             "Sticker deleted from repository. StickerId: {StickerId}. OutputRelativePath: {OutputRelativePath}.",
             id,
             removedSticker.OutputRelativePath);
-        return Results.NoContent();
+        return Results.Ok(new DeleteStickerResponse(true));
     }
 
     private static bool HasUsablePreview(MediaFile mediaFile) =>
@@ -617,19 +616,37 @@ public static class StickerEndpoints
 
     private static bool CanReadSticker(Sticker sticker, ICurrentUser currentUser, out string? requestUserId)
     {
+        if (TryGetRequestUserId(currentUser, out requestUserId))
+        {
+            return sticker.OwnerUserId == requestUserId ||
+                sticker is { IsPublic: true, Status: StickerStatus.Ready };
+        }
+
         if (sticker is { IsPublic: true, Status: StickerStatus.Ready })
         {
-            requestUserId = null;
             return true;
         }
 
-        requestUserId = currentUser.UserId;
-        return sticker.OwnerUserId == requestUserId;
+        throw new MissingUserIdException();
     }
 
-    private static StickerResponse ToStickerResponse(Sticker sticker, IMediaRepository repository)
+    private static bool TryGetRequestUserId(ICurrentUser currentUser, out string? requestUserId)
+    {
+        try
+        {
+            requestUserId = currentUser.UserId;
+            return true;
+        }
+        catch (MissingUserIdException)
+        {
+            requestUserId = null;
+            return false;
+        }
+    }
+
+    private static StickerResponse ToStickerResponse(Sticker sticker, IMediaRepository repository, string? currentUserId)
     {
         var sourceKind = repository.GetMediaFile(sticker.SourceMediaId)?.Kind ?? MediaKind.Video;
-        return StickerResponse.FromDomain(sticker, sourceKind);
+        return StickerResponse.FromDomain(sticker, sourceKind, sticker.OwnerUserId == currentUserId);
     }
 }
