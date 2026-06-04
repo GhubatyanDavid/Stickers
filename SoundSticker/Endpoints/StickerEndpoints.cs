@@ -236,13 +236,14 @@ public static class StickerEndpoints
         CancellationToken cancellationToken)
     {
         logger.LogInformation(
-            "Sticker creation requested. SourceMediaId: {SourceMediaId}. CoverImageId: {CoverImageId}. AudioSourceMediaId: {AudioSourceMediaId}. AudioMode: {AudioMode}. OutputFormat: {OutputFormat}. Shape: {Shape}. TrimStartMs: {TrimStartMs}. TrimEndMs: {TrimEndMs}. IsPublic: {IsPublic}.",
+            "Sticker creation requested. SourceMediaId: {SourceMediaId}. CoverImageId: {CoverImageId}. AudioSourceMediaId: {AudioSourceMediaId}. AudioMode: {AudioMode}. OutputFormat: {OutputFormat}. Shape: {Shape}. RemoveBackground: {RemoveBackground}. TrimStartMs: {TrimStartMs}. TrimEndMs: {TrimEndMs}. IsPublic: {IsPublic}.",
             request.SourceMediaId,
             request.CoverImageId,
             request.AudioSourceMediaId,
             request.AudioMode,
             request.OutputFormat,
             request.Shape,
+            request.RemoveBackground,
             request.TrimStartMs,
             request.TrimEndMs,
             request.IsPublic);
@@ -310,6 +311,10 @@ public static class StickerEndpoints
             audioMode,
             request.OutputFormat,
             request.Shape,
+            request.RemoveBackground,
+            NormalizeBackgroundColor(request.BackgroundColor),
+            GetBackgroundSimilarity(request.BackgroundSimilarity),
+            GetBackgroundBlend(request.BackgroundBlend),
             ownerUserId,
             request.IsPublic);
 
@@ -384,6 +389,24 @@ public static class StickerEndpoints
         if (request.Shape == StickerShape.Circle && request.OutputFormat != StickerOutputFormat.Gif)
         {
             return Results.BadRequest(new ProblemResponse("Circle shape requires GIF output because MP4 does not support transparent sticker edges."));
+        }
+
+        if (request.RemoveBackground)
+        {
+            if (sourceMedia.Kind is not (MediaKind.Image or MediaKind.Gif))
+            {
+                return Results.BadRequest(new ProblemResponse("Background removal is currently supported only for image and GIF sources."));
+            }
+
+            if (request.OutputFormat != StickerOutputFormat.Gif)
+            {
+                return Results.BadRequest(new ProblemResponse("Background removal requires GIF output because MP4 does not support transparent sticker backgrounds."));
+            }
+
+            if (!IsValidBackgroundColor(request.BackgroundColor))
+            {
+                return Results.BadRequest(new ProblemResponse("Background color must be a hex color like #ffffff or 0xffffff."));
+            }
         }
 
         return null;
@@ -673,6 +696,38 @@ public static class StickerEndpoints
 
     private static bool IsOutsideMediaDuration(int trimEndMs, MediaFile mediaFile) =>
         mediaFile.Preview?.DurationMs is long durationMs && trimEndMs > durationMs;
+
+    private static bool IsValidBackgroundColor(string? color) =>
+        string.IsNullOrWhiteSpace(color) ||
+        NormalizeBackgroundColor(color) is not null;
+
+    private static string? NormalizeBackgroundColor(string? color)
+    {
+        if (string.IsNullOrWhiteSpace(color))
+        {
+            return null;
+        }
+
+        var normalized = color.Trim();
+        if (normalized.StartsWith('#'))
+        {
+            normalized = normalized[1..];
+        }
+        else if (normalized.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized[2..];
+        }
+
+        return normalized.Length == 6 && normalized.All(Uri.IsHexDigit)
+            ? $"0x{normalized.ToUpperInvariant()}"
+            : null;
+    }
+
+    private static double GetBackgroundSimilarity(double? similarity) =>
+        Math.Clamp(similarity ?? 0.18d, 0.01d, 1d);
+
+    private static double GetBackgroundBlend(double? blend) =>
+        Math.Clamp(blend ?? 0.08d, 0d, 1d);
 
     private static bool CanReadSticker(Sticker sticker, ICurrentUser currentUser, out string? requestUserId)
     {

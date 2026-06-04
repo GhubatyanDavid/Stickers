@@ -11,6 +11,7 @@ ASP.NET Core backend for the sound sticker MVP.
 - Create a moving sticker job from an uploaded video or GIF.
 - Create an image sticker job from an uploaded image by looping it into MP4 or GIF.
 - Export original-aspect, square, circle, portrait, and landscape stickers.
+- Remove simple solid-color backgrounds from image and GIF sources.
 - Keep original video audio, mute it, or use audio from another uploaded audio/video file.
 - Trim video and audio tracks from different time ranges.
 - Process sticker jobs in a background worker.
@@ -106,6 +107,7 @@ DELETE /api/stickers/{id}                 X-User-Id required, returns isDelete
   "audioMode": "KeepOriginal",
   "outputFormat": "Mp4",
   "shape": "Original",
+  "removeBackground": false,
   "isPublic": false
 }
 ```
@@ -117,6 +119,9 @@ Use `"shape": "Square"` for a square crop, `"shape": "Portrait"` for 4:5, and
 `"shape": "Landscape"` for 16:9. Use `"shape": "Circle"` with
 `"outputFormat": "Gif"` and `"audioMode": "Mute"` for a transparent circular
 GIF sticker.
+Use `"removeBackground": true` with image/GIF sources and
+`"outputFormat": "Gif"` to remove a simple solid-color background. Pass
+`"backgroundColor": "#ffffff"` or another hex color; if omitted, white is used.
 Use `"isPublic": true` when the sticker should appear in `/api/stickers/all`.
 Private stickers stay visible only in that user's `/api/stickers/my` list.
 `GET /api/stickers` returns the current user's stickers plus ready public

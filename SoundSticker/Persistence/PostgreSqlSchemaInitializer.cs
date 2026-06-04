@@ -35,6 +35,10 @@ public sealed class PostgreSqlSchemaInitializer(
                 audio_mode integer NOT NULL,
                 output_format integer NOT NULL DEFAULT 0,
                 shape integer NOT NULL DEFAULT 0,
+                remove_background boolean NOT NULL DEFAULT false,
+                background_color text NULL,
+                background_similarity double precision NOT NULL DEFAULT 0.18,
+                background_blend double precision NOT NULL DEFAULT 0.08,
                 trim_start_ms integer NOT NULL,
                 trim_end_ms integer NOT NULL,
                 audio_trim_start_ms integer NOT NULL,
@@ -70,6 +74,18 @@ public sealed class PostgreSqlSchemaInitializer(
 
             ALTER TABLE stickers
                 ADD COLUMN IF NOT EXISTS shape integer NOT NULL DEFAULT 0;
+
+            ALTER TABLE stickers
+                ADD COLUMN IF NOT EXISTS remove_background boolean NOT NULL DEFAULT false;
+
+            ALTER TABLE stickers
+                ADD COLUMN IF NOT EXISTS background_color text NULL;
+
+            ALTER TABLE stickers
+                ADD COLUMN IF NOT EXISTS background_similarity double precision NOT NULL DEFAULT 0.18;
+
+            ALTER TABLE stickers
+                ADD COLUMN IF NOT EXISTS background_blend double precision NOT NULL DEFAULT 0.08;
 
             CREATE INDEX IF NOT EXISTS ix_media_files_created_at ON media_files (created_at DESC);
             CREATE INDEX IF NOT EXISTS ix_media_files_owner_created_at ON media_files (owner_user_id, created_at DESC);

@@ -32,6 +32,10 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
         audio_mode,
         output_format,
         shape,
+        remove_background,
+        background_color,
+        background_similarity,
+        background_blend,
         trim_start_ms,
         trim_end_ms,
         audio_trim_start_ms,
@@ -155,6 +159,10 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
                 audio_mode,
                 output_format,
                 shape,
+                remove_background,
+                background_color,
+                background_similarity,
+                background_blend,
                 trim_start_ms,
                 trim_end_ms,
                 audio_trim_start_ms,
@@ -176,6 +184,10 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
                 @audio_mode,
                 @output_format,
                 @shape,
+                @remove_background,
+                @background_color,
+                @background_similarity,
+                @background_blend,
                 @trim_start_ms,
                 @trim_end_ms,
                 @audio_trim_start_ms,
@@ -196,6 +208,10 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
                 audio_mode = EXCLUDED.audio_mode,
                 output_format = EXCLUDED.output_format,
                 shape = EXCLUDED.shape,
+                remove_background = EXCLUDED.remove_background,
+                background_color = EXCLUDED.background_color,
+                background_similarity = EXCLUDED.background_similarity,
+                background_blend = EXCLUDED.background_blend,
                 trim_start_ms = EXCLUDED.trim_start_ms,
                 trim_end_ms = EXCLUDED.trim_end_ms,
                 audio_trim_start_ms = EXCLUDED.audio_trim_start_ms,
@@ -405,6 +421,10 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
         AddInteger(command, "audio_mode", (int)sticker.AudioMode);
         AddInteger(command, "output_format", (int)sticker.OutputFormat);
         AddInteger(command, "shape", (int)sticker.Shape);
+        AddBoolean(command, "remove_background", sticker.RemoveBackground);
+        AddNullableText(command, "background_color", sticker.BackgroundColor);
+        AddDouble(command, "background_similarity", sticker.BackgroundSimilarity);
+        AddDouble(command, "background_blend", sticker.BackgroundBlend);
         AddInteger(command, "trim_start_ms", sticker.TrimStartMs);
         AddInteger(command, "trim_end_ms", sticker.TrimEndMs);
         AddInteger(command, "audio_trim_start_ms", sticker.AudioTrimStartMs);
@@ -454,6 +474,10 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
             (StickerAudioMode)GetInt32(reader, "audio_mode"),
             (StickerOutputFormat)GetInt32(reader, "output_format"),
             (StickerShape)GetInt32(reader, "shape"),
+            GetBoolean(reader, "remove_background"),
+            GetNullableString(reader, "background_color"),
+            GetDouble(reader, "background_similarity"),
+            GetDouble(reader, "background_blend"),
             GetInt32(reader, "trim_start_ms"),
             GetInt32(reader, "trim_end_ms"),
             GetInt32(reader, "audio_trim_start_ms"),
@@ -521,6 +545,12 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
         parameter.Value = value;
     }
 
+    private static void AddDouble(NpgsqlCommand command, string name, double value)
+    {
+        var parameter = command.Parameters.Add(name, NpgsqlDbType.Double);
+        parameter.Value = value;
+    }
+
     private static void AddTimestamp(NpgsqlCommand command, string name, DateTimeOffset value)
     {
         var parameter = command.Parameters.Add(name, NpgsqlDbType.TimestampTz);
@@ -571,6 +601,9 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
 
     private static bool GetBoolean(NpgsqlDataReader reader, string name) =>
         reader.GetBoolean(reader.GetOrdinal(name));
+
+    private static double GetDouble(NpgsqlDataReader reader, string name) =>
+        reader.GetDouble(reader.GetOrdinal(name));
 
     private static DateTimeOffset GetDateTimeOffset(NpgsqlDataReader reader, string name)
     {

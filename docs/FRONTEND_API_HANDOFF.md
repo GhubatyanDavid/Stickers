@@ -30,6 +30,7 @@ All JSON enum values are serialized as strings.
 - Create a moving sticker job from an uploaded video or GIF.
 - Create an image sticker job by looping an uploaded image into MP4 or GIF.
 - Export stickers as original aspect, square, circle, portrait, or landscape.
+- Remove simple solid-color backgrounds from image and GIF sources.
 - Use matching audio from the source video.
 - Mute the sticker.
 - Use audio from another uploaded audio or video file.
@@ -43,6 +44,9 @@ All JSON enum values are serialized as strings.
 - Sticker output defaults to MP4 video. GIF output is supported with
   `audioMode: "Mute"` because GIF files cannot contain audio.
 - Circle shape requires GIF output so the outside edge can stay transparent.
+- Background removal is color-key based, works best on simple solid-color
+  backgrounds, and currently supports only image/GIF sources with GIF output.
+  It is not AI person/object segmentation.
 - Sticker duration is limited by `Sticker:MaxDurationMs` (`30000` ms in the
   committed app settings).
 - Media and sticker metadata are stored in PostgreSQL when the default
@@ -193,6 +197,10 @@ Notes:
   "durationMs": 5000,
   "outputFormat": "Mp4",
   "shape": "Original",
+  "removeBackground": false,
+  "backgroundColor": null,
+  "backgroundSimilarity": 0.18,
+  "backgroundBlend": 0.08,
   "isPublic": false,
   "isFavorite": false,
   "isDelete": true,
@@ -393,6 +401,11 @@ Optional fields:
 - `outputFormat` (`"Mp4"` default, or `"Gif"`)
 - `shape` (`"Original"` default, `"Square"`, `"Circle"`, `"Portrait"`,
   `"Landscape"`)
+- `removeBackground` (`false` default)
+- `backgroundColor` hex color such as `"#ffffff"` or `"0x00ff00"`; default is
+  white when background removal is enabled.
+- `backgroundSimilarity` (`0.18` default, clamped to `0.01`-`1.0`)
+- `backgroundBlend` (`0.08` default, clamped to `0.0`-`1.0`)
 - `isPublic`
 
 Set `"isPublic": true` when the sticker should appear in the public feed after
@@ -483,6 +496,25 @@ Circle stickers use GIF output so the outside edge is transparent:
 }
 ```
 
+#### Remove Background From Image Or GIF
+
+This removes a solid-color background and exports a transparent GIF. Use the
+dominant background color. If `backgroundColor` is omitted, white is used.
+
+```json
+{
+  "sourceMediaId": "uploaded-image-or-gif-id",
+  "trimStartMs": 0,
+  "trimEndMs": 5000,
+  "audioMode": "Mute",
+  "outputFormat": "Gif",
+  "removeBackground": true,
+  "backgroundColor": "#ffffff",
+  "backgroundSimilarity": 0.18,
+  "backgroundBlend": 0.08
+}
+```
+
 #### Custom Audio Request
 
 Use video seconds 7-12 and another uploaded media item's audio seconds 2-7:
@@ -547,6 +579,9 @@ Trim validation rules:
 - Audio trim end must not exceed its selected audio source duration.
 - GIF output must use `audioMode: "Mute"`.
 - Circle shape must use `outputFormat: "Gif"`.
+- Background removal must use image/GIF source media.
+- Background removal must use `outputFormat: "Gif"`.
+- Background color must be a hex color when provided.
 
 Audio duration behavior:
 
@@ -567,6 +602,8 @@ Common sticker validation errors:
 - Invalid audio mode.
 - Invalid output format.
 - Invalid sticker shape.
+- Background removal requested for an unsupported source or output format.
+- Invalid background color.
 - Invalid trim range.
 
 ### GET /api/stickers

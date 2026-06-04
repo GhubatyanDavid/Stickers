@@ -10,6 +10,10 @@ public sealed class Sticker
         StickerAudioMode audioMode,
         StickerOutputFormat outputFormat,
         StickerShape shape,
+        bool removeBackground,
+        string? backgroundColor,
+        double backgroundSimilarity,
+        double backgroundBlend,
         int trimStartMs,
         int trimEndMs,
         int audioTrimStartMs,
@@ -26,6 +30,10 @@ public sealed class Sticker
         AudioMode = audioMode;
         OutputFormat = outputFormat;
         Shape = shape;
+        RemoveBackground = removeBackground;
+        BackgroundColor = backgroundColor;
+        BackgroundSimilarity = backgroundSimilarity;
+        BackgroundBlend = backgroundBlend;
         TrimStartMs = trimStartMs;
         TrimEndMs = trimEndMs;
         AudioTrimStartMs = audioTrimStartMs;
@@ -49,6 +57,14 @@ public sealed class Sticker
     public StickerOutputFormat OutputFormat { get; }
 
     public StickerShape Shape { get; }
+
+    public bool RemoveBackground { get; }
+
+    public string? BackgroundColor { get; }
+
+    public double BackgroundSimilarity { get; }
+
+    public double BackgroundBlend { get; }
 
     public int TrimStartMs { get; }
 
@@ -90,6 +106,10 @@ public sealed class Sticker
         StickerAudioMode audioMode,
         StickerOutputFormat outputFormat,
         StickerShape shape,
+        bool removeBackground,
+        string? backgroundColor,
+        double backgroundSimilarity,
+        double backgroundBlend,
         string ownerUserId,
         bool isPublic) =>
         new(
@@ -100,6 +120,10 @@ public sealed class Sticker
             audioMode,
             outputFormat,
             shape,
+            removeBackground,
+            backgroundColor,
+            backgroundSimilarity,
+            backgroundBlend,
             trimStartMs,
             trimEndMs,
             audioTrimStartMs,
@@ -117,6 +141,10 @@ public sealed class Sticker
         StickerAudioMode audioMode,
         StickerOutputFormat outputFormat,
         StickerShape shape,
+        bool removeBackground,
+        string? backgroundColor,
+        double backgroundSimilarity,
+        double backgroundBlend,
         int trimStartMs,
         int trimEndMs,
         int audioTrimStartMs,
@@ -138,6 +166,10 @@ public sealed class Sticker
             audioMode,
             outputFormat,
             shape,
+            removeBackground,
+            backgroundColor,
+            backgroundSimilarity,
+            backgroundBlend,
             trimStartMs,
             trimEndMs,
             audioTrimStartMs,

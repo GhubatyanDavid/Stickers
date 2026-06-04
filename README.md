@@ -21,6 +21,7 @@ or video file.
 - Loop still images into generated MP4 or GIF stickers.
 - Export silent looping GIF stickers with `outputFormat: "Gif"`.
 - Export square, circle, portrait, and landscape sticker shapes.
+- Remove simple solid-color backgrounds from image and GIF sources.
 - Process stickers asynchronously and query their status.
 - Serve generated sticker files through the local `/media` path.
 - Explore the API through Swagger during development.
@@ -131,6 +132,7 @@ Create a sticker with the source video's matching audio:
   "audioMode": "KeepOriginal",
   "outputFormat": "Mp4",
   "shape": "Original",
+  "removeBackground": false,
   "isPublic": true
 }
 ```
@@ -143,6 +145,9 @@ Omit `outputFormat` for MP4, or send `"outputFormat": "Gif"` with
 `"audioMode": "Mute"` for a silent looping GIF.
 Omit `shape` for the source aspect ratio, or send `"Square"`, `"Circle"`,
 `"Portrait"`, or `"Landscape"`; circle output should be a muted GIF.
+Use `"removeBackground": true` with image/GIF sources and
+`"outputFormat": "Gif"` to remove a simple solid-color background; pass
+`"backgroundColor"` as a hex color for best results.
 `DELETE /api/stickers/{id}` returns `{ "isDelete": true }` for the current
 user's deleted sticker and `{ "isDelete": false }` when it is missing or belongs
 to another user.

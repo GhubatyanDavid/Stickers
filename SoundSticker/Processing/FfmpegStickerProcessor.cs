@@ -226,7 +226,7 @@ public sealed class FfmpegStickerProcessor(
     private static string BuildMp4FilterGraph(Sticker sticker, StickerOptions options)
     {
         var videoDuration = ToSeconds(sticker.DurationMs);
-        var videoFilter = $"[0:v:0]{BuildVisualFilter(sticker.Shape, options, allowTransparentMask: false)},format=yuv420p,trim=duration={videoDuration},setpts=PTS-STARTPTS[v]";
+        var videoFilter = $"[0:v:0]{BuildVisualFilter(sticker, options, allowTransparentMask: false)},format=yuv420p,trim=duration={videoDuration},setpts=PTS-STARTPTS[v]";
 
         if (sticker.AudioMode == StickerAudioMode.Mute)
         {
@@ -247,26 +247,38 @@ public sealed class FfmpegStickerProcessor(
         var videoDuration = ToSeconds(sticker.DurationMs);
 
         return
-            $"[0:v:0]{BuildVisualFilter(sticker.Shape, options, allowTransparentMask: true)},trim=duration={videoDuration},setpts=PTS-STARTPTS,split[gif_frames][palette_source];" +
+            $"[0:v:0]{BuildVisualFilter(sticker, options, allowTransparentMask: true)},trim=duration={videoDuration},setpts=PTS-STARTPTS,split[gif_frames][palette_source];" +
             "[palette_source]palettegen=stats_mode=diff:reserve_transparent=1[palette];" +
             "[gif_frames][palette]paletteuse=dither=sierra2_4a:alpha_threshold=128[v]";
     }
 
     private static string BuildVisualFilter(
-        StickerShape shape,
+        Sticker sticker,
         StickerOptions options,
         bool allowTransparentMask)
     {
         var fps = GetOutputFps(options);
         var maxDimension = GetEvenDimension(GetMaxOutputDimension(options));
-        var shapeFilter = BuildShapeFilter(shape, maxDimension);
-
-        if (shape == StickerShape.Circle && allowTransparentMask)
+        var filters = new List<string>
         {
-            return $"fps={fps},{shapeFilter},setsar=1,format=rgba,{BuildCircleAlphaMask()}";
+            $"fps={fps}",
+            BuildShapeFilter(sticker.Shape, maxDimension),
+            "setsar=1"
+        };
+
+        if (allowTransparentMask && sticker.RemoveBackground)
+        {
+            filters.Add("format=rgba");
+            filters.Add(BuildBackgroundRemovalFilter(sticker));
         }
 
-        return $"fps={fps},{shapeFilter},setsar=1";
+        if (sticker.Shape == StickerShape.Circle && allowTransparentMask)
+        {
+            filters.Add("format=rgba");
+            filters.Add(BuildCircleAlphaMask());
+        }
+
+        return string.Join(",", filters);
     }
 
     private static string BuildShapeFilter(StickerShape shape, int maxDimension)
@@ -288,7 +300,17 @@ public sealed class FfmpegStickerProcessor(
         };
 
     private static string BuildCircleAlphaMask() =>
-        "geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte(pow(X-W/2,2)+pow(Y-H/2,2),pow(W/2,2)),255,0)'";
+        "geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte(pow(X-W/2,2)+pow(Y-H/2,2),pow(W/2,2)),a(X,Y),0)'";
+
+    private static string BuildBackgroundRemovalFilter(Sticker sticker)
+    {
+        var backgroundColor = string.IsNullOrWhiteSpace(sticker.BackgroundColor)
+            ? "0xFFFFFF"
+            : sticker.BackgroundColor;
+        var similarity = sticker.BackgroundSimilarity.ToString("0.###", CultureInfo.InvariantCulture);
+        var blend = sticker.BackgroundBlend.ToString("0.###", CultureInfo.InvariantCulture);
+        return $"colorkey={backgroundColor}:{similarity}:{blend}";
+    }
 
     private static string ToSeconds(int milliseconds) =>
         (milliseconds / 1000d).ToString("0.###", CultureInfo.InvariantCulture);
