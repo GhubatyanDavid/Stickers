@@ -10,6 +10,7 @@ ASP.NET Core backend for the sound sticker MVP.
 - Store media and sticker metadata in PostgreSQL.
 - Create a moving sticker job from an uploaded video or GIF.
 - Create an image sticker job from an uploaded image by looping it into MP4 or GIF.
+- Export original-aspect, square, circle, portrait, and landscape stickers.
 - Keep original video audio, mute it, or use audio from another uploaded audio/video file.
 - Trim video and audio tracks from different time ranges.
 - Process sticker jobs in a background worker.
@@ -102,6 +103,7 @@ DELETE /api/stickers/{id}                 X-User-Id required
   "trimEndMs": 5000,
   "audioMode": "KeepOriginal",
   "outputFormat": "Mp4",
+  "shape": "Original",
   "isPublic": false
 }
 ```
@@ -109,6 +111,10 @@ DELETE /api/stickers/{id}                 X-User-Id required
 Use `"Mute"` for silent stickers.
 Use `"outputFormat": "Gif"` with `"audioMode": "Mute"` to export a silent
 looping GIF. If `outputFormat` is omitted, the backend exports MP4.
+Use `"shape": "Square"` for a square crop, `"shape": "Portrait"` for 4:5, and
+`"shape": "Landscape"` for 16:9. Use `"shape": "Circle"` with
+`"outputFormat": "Gif"` and `"audioMode": "Mute"` for a transparent circular
+GIF sticker.
 Use `"isPublic": true` when the sticker should appear in `/api/stickers/all`.
 Private stickers stay visible only in that user's `/api/stickers/my` list.
 `GET /api/stickers` returns the current user's stickers plus ready public

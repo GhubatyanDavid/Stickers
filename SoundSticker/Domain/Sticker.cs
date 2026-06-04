@@ -9,6 +9,7 @@ public sealed class Sticker
         Guid? audioSourceMediaId,
         StickerAudioMode audioMode,
         StickerOutputFormat outputFormat,
+        StickerShape shape,
         int trimStartMs,
         int trimEndMs,
         int audioTrimStartMs,
@@ -24,6 +25,7 @@ public sealed class Sticker
         AudioSourceMediaId = audioSourceMediaId;
         AudioMode = audioMode;
         OutputFormat = outputFormat;
+        Shape = shape;
         TrimStartMs = trimStartMs;
         TrimEndMs = trimEndMs;
         AudioTrimStartMs = audioTrimStartMs;
@@ -45,6 +47,8 @@ public sealed class Sticker
     public StickerAudioMode AudioMode { get; }
 
     public StickerOutputFormat OutputFormat { get; }
+
+    public StickerShape Shape { get; }
 
     public int TrimStartMs { get; }
 
@@ -85,6 +89,7 @@ public sealed class Sticker
         int audioTrimEndMs,
         StickerAudioMode audioMode,
         StickerOutputFormat outputFormat,
+        StickerShape shape,
         string ownerUserId,
         bool isPublic) =>
         new(
@@ -94,6 +99,7 @@ public sealed class Sticker
             audioSourceMediaId,
             audioMode,
             outputFormat,
+            shape,
             trimStartMs,
             trimEndMs,
             audioTrimStartMs,
@@ -110,6 +116,7 @@ public sealed class Sticker
         Guid? audioSourceMediaId,
         StickerAudioMode audioMode,
         StickerOutputFormat outputFormat,
+        StickerShape shape,
         int trimStartMs,
         int trimEndMs,
         int audioTrimStartMs,
@@ -130,6 +137,7 @@ public sealed class Sticker
             audioSourceMediaId,
             audioMode,
             outputFormat,
+            shape,
             trimStartMs,
             trimEndMs,
             audioTrimStartMs,

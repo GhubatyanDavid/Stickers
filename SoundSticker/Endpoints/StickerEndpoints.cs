@@ -17,7 +17,7 @@ public static class StickerEndpoints
             .RequireRateLimiting("sticker-creation")
             .WithName("CreateVideoSticker")
             .WithSummary("Create video sticker")
-            .WithDescription("Queues sticker processing from an uploaded video, GIF, or image. Set outputFormat=Gif for silent GIF output. Set isPublic=true to show it in All Stickers after processing.")
+            .WithDescription("Queues sticker processing from an uploaded video, GIF, or image. Set outputFormat=Gif for silent GIF output. Use shape to export square, circle, portrait, or landscape stickers. Set isPublic=true to show it in All Stickers after processing.")
             .Accepts<CreateVideoStickerRequest>("application/json")
             .Produces<StickerResponse>(StatusCodes.Status202Accepted)
             .Produces<ProblemResponse>(StatusCodes.Status400BadRequest)
@@ -29,7 +29,7 @@ public static class StickerEndpoints
             .RequireRateLimiting("sticker-creation")
             .WithName("CreateImageSticker")
             .WithSummary("Create image sticker")
-            .WithDescription("Queues sticker processing from an uploaded image by looping it into MP4 or GIF. Use Mute or UseMedia audio mode.")
+            .WithDescription("Queues sticker processing from an uploaded image by looping it into MP4 or GIF. Use shape to export square, circle, portrait, or landscape stickers. Use Mute or UseMedia audio mode.")
             .Accepts<CreateVideoStickerRequest>("application/json")
             .Produces<StickerResponse>(StatusCodes.Status202Accepted)
             .Produces<ProblemResponse>(StatusCodes.Status400BadRequest)
@@ -205,7 +205,7 @@ public static class StickerEndpoints
             sticker.Status,
             sticker.OutputUrl,
             sticker.ErrorMessage);
-        return Results.Ok(new StickerStatusResponse(sticker.Id, sticker.Status, sticker.OutputFormat, sticker.ErrorMessage, sticker.OutputUrl));
+        return Results.Ok(new StickerStatusResponse(sticker.Id, sticker.Status, sticker.OutputFormat, sticker.Shape, sticker.ErrorMessage, sticker.OutputUrl));
     }
 
     private static async Task<IResult> CreateStickerAsync(
@@ -219,12 +219,13 @@ public static class StickerEndpoints
         CancellationToken cancellationToken)
     {
         logger.LogInformation(
-            "Sticker creation requested. SourceMediaId: {SourceMediaId}. CoverImageId: {CoverImageId}. AudioSourceMediaId: {AudioSourceMediaId}. AudioMode: {AudioMode}. OutputFormat: {OutputFormat}. TrimStartMs: {TrimStartMs}. TrimEndMs: {TrimEndMs}. IsPublic: {IsPublic}.",
+            "Sticker creation requested. SourceMediaId: {SourceMediaId}. CoverImageId: {CoverImageId}. AudioSourceMediaId: {AudioSourceMediaId}. AudioMode: {AudioMode}. OutputFormat: {OutputFormat}. Shape: {Shape}. TrimStartMs: {TrimStartMs}. TrimEndMs: {TrimEndMs}. IsPublic: {IsPublic}.",
             request.SourceMediaId,
             request.CoverImageId,
             request.AudioSourceMediaId,
             request.AudioMode,
             request.OutputFormat,
+            request.Shape,
             request.TrimStartMs,
             request.TrimEndMs,
             request.IsPublic);
@@ -291,6 +292,7 @@ public static class StickerEndpoints
             audioTrimEndMs,
             audioMode,
             request.OutputFormat,
+            request.Shape,
             ownerUserId,
             request.IsPublic);
 
@@ -352,9 +354,19 @@ public static class StickerEndpoints
             return Results.BadRequest(new ProblemResponse("Output format is invalid."));
         }
 
+        if (!Enum.IsDefined(request.Shape))
+        {
+            return Results.BadRequest(new ProblemResponse("Sticker shape is invalid."));
+        }
+
         if (request.OutputFormat == StickerOutputFormat.Gif && request.AudioMode != StickerAudioMode.Mute)
         {
             return Results.BadRequest(new ProblemResponse("GIF output does not support audio. Use Mute audio mode."));
+        }
+
+        if (request.Shape == StickerShape.Circle && request.OutputFormat != StickerOutputFormat.Gif)
+        {
+            return Results.BadRequest(new ProblemResponse("Circle shape requires GIF output because MP4 does not support transparent sticker edges."));
         }
 
         return null;

@@ -29,6 +29,7 @@ All JSON enum values are serialized as strings.
 - Generate a thumbnail URL for uploaded video and GIF files.
 - Create a moving sticker job from an uploaded video or GIF.
 - Create an image sticker job by looping an uploaded image into MP4 or GIF.
+- Export stickers as original aspect, square, circle, portrait, or landscape.
 - Use matching audio from the source video.
 - Mute the sticker.
 - Use audio from another uploaded audio or video file.
@@ -41,6 +42,7 @@ All JSON enum values are serialized as strings.
 
 - Sticker output defaults to MP4 video. GIF output is supported with
   `audioMode: "Mute"` because GIF files cannot contain audio.
+- Circle shape requires GIF output so the outside edge can stay transparent.
 - Sticker duration is limited by `Sticker:MaxDurationMs` (`30000` ms in the
   committed app settings).
 - Media and sticker metadata are stored in PostgreSQL when the default
@@ -104,6 +106,25 @@ Meaning:
 
 - `Mp4`: export an MP4 video sticker. This is the default when omitted.
 - `Gif`: export a silent looping GIF sticker. Use `audioMode: "Mute"`.
+
+### StickerShape
+
+```text
+Original
+Square
+Circle
+Portrait
+Landscape
+```
+
+Meaning:
+
+- `Original`: preserve the source aspect ratio. This is the default when
+  omitted.
+- `Square`: center-crop to a 1:1 sticker.
+- `Circle`: center-crop to a transparent circular GIF sticker.
+- `Portrait`: center-crop to a 4:5 sticker.
+- `Landscape`: center-crop to a 16:9 sticker.
 
 ### StickerStatus
 
@@ -171,6 +192,7 @@ Notes:
   "audioTrimEndMs": 7000,
   "durationMs": 5000,
   "outputFormat": "Mp4",
+  "shape": "Original",
   "isPublic": false,
   "isFavorite": false,
   "sourceType": "video",
@@ -188,6 +210,7 @@ Notes:
   "id": "59936b11-4a0c-4f62-bc2f-bf6516e23f81",
   "status": "Ready",
   "outputFormat": "Mp4",
+  "shape": "Original",
   "errorMessage": null,
   "outputUrl": "/media/stickers/59936b114a0c4f62bc2fbf6516e23f81.mp4"
 }
@@ -332,6 +355,8 @@ Optional fields:
 - `audioTrimStartMs`
 - `audioTrimEndMs`
 - `outputFormat` (`"Mp4"` default, or `"Gif"`)
+- `shape` (`"Original"` default, `"Square"`, `"Circle"`, `"Portrait"`,
+  `"Landscape"`)
 - `isPublic`
 
 Set `"isPublic": true` when the sticker should appear in the public feed after
@@ -390,6 +415,35 @@ GIF output is silent and loops forever:
   "trimEndMs": 5000,
   "audioMode": "Mute",
   "outputFormat": "Gif"
+}
+```
+
+#### Square Sticker Request
+
+Center-crop the source into a 1:1 MP4 sticker:
+
+```json
+{
+  "sourceMediaId": "uploaded-video-or-image-id",
+  "trimStartMs": 0,
+  "trimEndMs": 5000,
+  "audioMode": "Mute",
+  "shape": "Square"
+}
+```
+
+#### Circle Sticker Request
+
+Circle stickers use GIF output so the outside edge is transparent:
+
+```json
+{
+  "sourceMediaId": "uploaded-video-gif-or-image-id",
+  "trimStartMs": 0,
+  "trimEndMs": 5000,
+  "audioMode": "Mute",
+  "outputFormat": "Gif",
+  "shape": "Circle"
 }
 ```
 
@@ -456,6 +510,7 @@ Trim validation rules:
 - Non-muted audio trim start/end must be valid.
 - Audio trim end must not exceed its selected audio source duration.
 - GIF output must use `audioMode: "Mute"`.
+- Circle shape must use `outputFormat: "Gif"`.
 
 Audio duration behavior:
 
@@ -475,6 +530,7 @@ Common sticker validation errors:
 - Audio source has no audio stream.
 - Invalid audio mode.
 - Invalid output format.
+- Invalid sticker shape.
 - Invalid trim range.
 
 ### GET /api/stickers

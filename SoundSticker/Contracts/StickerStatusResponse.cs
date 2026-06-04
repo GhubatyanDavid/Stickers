@@ -6,5 +6,6 @@ public sealed record StickerStatusResponse(
     Guid Id,
     StickerStatus Status,
     StickerOutputFormat OutputFormat,
+    StickerShape Shape,
     string? ErrorMessage,
     string? OutputUrl);

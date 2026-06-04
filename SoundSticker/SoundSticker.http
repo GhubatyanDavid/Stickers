@@ -38,7 +38,21 @@ Content-Type: application/json
   "trimStartMs": 0,
   "trimEndMs": 5000,
   "audioMode": "Mute",
-  "outputFormat": "Gif"
+  "shape": "Square"
+}
+
+###
+
+POST {{SoundSticker_HostAddress}}/api/stickers/from-video
+Content-Type: application/json
+
+{
+  "sourceMediaId": "{{MediaId}}",
+  "trimStartMs": 0,
+  "trimEndMs": 5000,
+  "audioMode": "Mute",
+  "outputFormat": "Gif",
+  "shape": "Circle"
 }
 
 ###

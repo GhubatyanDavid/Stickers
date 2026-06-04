@@ -20,6 +20,7 @@ or video file.
 - Reuse audio from the source video or attach audio from another uploaded file.
 - Loop still images into generated MP4 or GIF stickers.
 - Export silent looping GIF stickers with `outputFormat: "Gif"`.
+- Export square, circle, portrait, and landscape sticker shapes.
 - Process stickers asynchronously and query their status.
 - Serve generated sticker files through the local `/media` path.
 - Explore the API through Swagger during development.
@@ -127,6 +128,7 @@ Create a sticker with the source video's matching audio:
   "trimEndMs": 5000,
   "audioMode": "KeepOriginal",
   "outputFormat": "Mp4",
+  "shape": "Original",
   "isPublic": true
 }
 ```
@@ -137,6 +139,8 @@ Use `GET /api/stickers/my` when the UI needs only the current user's stickers,
 and `GET /api/stickers/all` for the public-ready list without a user header.
 Omit `outputFormat` for MP4, or send `"outputFormat": "Gif"` with
 `"audioMode": "Mute"` for a silent looping GIF.
+Omit `shape` for the source aspect ratio, or send `"Square"`, `"Circle"`,
+`"Portrait"`, or `"Landscape"`; circle output should be a muted GIF.
 
 Use one time range for video and a different time range for audio from the same
 video:
