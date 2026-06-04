@@ -239,6 +239,19 @@ Notes:
 - `isDelete: false` means the sticker was missing or did not belong to the
   current user.
 
+### StickerFavoriteResponse
+
+```json
+{
+  "isFavorite": true
+}
+```
+
+Notes:
+
+- `isFavorite: true` means the current `X-User-Id` favorited the sticker.
+- `isFavorite: false` means the favorite was removed.
+
 ## Endpoints
 
 ### GET /api/health
@@ -573,6 +586,11 @@ Delete button rule:
 
 - Show delete controls when a sticker item has `isDelete: true`.
 
+Favorite rule:
+
+- Use each sticker item's `isFavorite` to render the favorite state for the
+  current user.
+
 ### GET /api/stickers/my
 
 Purpose:
@@ -587,6 +605,11 @@ Success:
 Delete button rule:
 
 - All returned stickers belong to the current user, so `isDelete` is `true`.
+
+Favorite rule:
+
+- Use each sticker item's `isFavorite` to render the favorite state for the
+  current user.
 
 ### GET /api/stickers/all
 
@@ -605,6 +628,10 @@ Delete button rule:
 
 - This public endpoint has no current user context, so `isDelete` is `false`.
 
+Favorite rule:
+
+- This public endpoint has no current user context, so `isFavorite` is `false`.
+
 ### GET /api/stickers/{id}
 
 Purpose:
@@ -621,6 +648,10 @@ Success:
 Delete button rule:
 
 - Show delete controls when the returned sticker has `isDelete: true`.
+
+Favorite rule:
+
+- Use `isFavorite` to render the favorite state for the current user.
 
 Missing sticker:
 
@@ -648,6 +679,52 @@ Recommended polling behavior:
 - Stop polling when status is `Ready` or `Failed`.
 - When `Ready`, use `outputUrl`.
 - When `Failed`, show `errorMessage`.
+
+### POST /api/stickers/{id}/favorite
+
+Purpose:
+
+- Mark a visible sticker as favorite for the current `X-User-Id`.
+
+Success:
+
+- `200 OK`
+- Body: `StickerFavoriteResponse`
+
+Example response:
+
+```json
+{
+  "isFavorite": true
+}
+```
+
+Missing or not visible:
+
+- `404 Not Found`
+
+### DELETE /api/stickers/{id}/favorite
+
+Purpose:
+
+- Remove a visible sticker from favorites for the current `X-User-Id`.
+
+Success:
+
+- `200 OK`
+- Body: `StickerFavoriteResponse`
+
+Example response:
+
+```json
+{
+  "isFavorite": false
+}
+```
+
+Missing or not visible:
+
+- `404 Not Found`
 
 ### DELETE /api/stickers/{id}
 

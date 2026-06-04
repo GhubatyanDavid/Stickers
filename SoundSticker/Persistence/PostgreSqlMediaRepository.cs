@@ -305,6 +305,78 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
         return sticker;
     }
 
+    public void AddStickerFavorite(Guid stickerId, string ownerUserId)
+    {
+        using var command = dataSource.CreateCommand("""
+            INSERT INTO sticker_favorites (
+                sticker_id,
+                owner_user_id,
+                created_at
+            )
+            VALUES (
+                @sticker_id,
+                @owner_user_id,
+                @created_at
+            )
+            ON CONFLICT (sticker_id, owner_user_id) DO NOTHING;
+            """);
+
+        AddGuid(command, "sticker_id", stickerId);
+        AddText(command, "owner_user_id", ownerUserId);
+        AddTimestamp(command, "created_at", DateTimeOffset.UtcNow);
+        command.ExecuteNonQuery();
+    }
+
+    public void RemoveStickerFavorite(Guid stickerId, string ownerUserId)
+    {
+        using var command = dataSource.CreateCommand("""
+            DELETE FROM sticker_favorites
+            WHERE sticker_id = @sticker_id
+                AND owner_user_id = @owner_user_id;
+            """);
+
+        AddGuid(command, "sticker_id", stickerId);
+        AddText(command, "owner_user_id", ownerUserId);
+        command.ExecuteNonQuery();
+    }
+
+    public bool IsStickerFavorite(Guid stickerId, string ownerUserId)
+    {
+        using var command = dataSource.CreateCommand("""
+            SELECT EXISTS (
+                SELECT 1
+                FROM sticker_favorites
+                WHERE sticker_id = @sticker_id
+                    AND owner_user_id = @owner_user_id
+            );
+            """);
+
+        AddGuid(command, "sticker_id", stickerId);
+        AddText(command, "owner_user_id", ownerUserId);
+        return command.ExecuteScalar() is true;
+    }
+
+    public IReadOnlyCollection<Guid> GetFavoriteStickerIdsByOwner(string ownerUserId)
+    {
+        using var command = dataSource.CreateCommand("""
+            SELECT sticker_id
+            FROM sticker_favorites
+            WHERE owner_user_id = @owner_user_id
+            ORDER BY created_at DESC;
+            """);
+
+        AddText(command, "owner_user_id", ownerUserId);
+        using var reader = command.ExecuteReader();
+        var stickerIds = new List<Guid>();
+
+        while (reader.Read())
+        {
+            stickerIds.Add(reader.GetGuid(0));
+        }
+
+        return stickerIds;
+    }
+
     private static void AddMediaFileParameters(NpgsqlCommand command, MediaFile mediaFile)
     {
         AddGuid(command, "id", mediaFile.Id);

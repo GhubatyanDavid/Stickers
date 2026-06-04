@@ -92,4 +92,14 @@ Accept: application/json
 
 ###
 
+POST {{SoundSticker_HostAddress}}/api/stickers/{{StickerId}}/favorite
+Accept: application/json
+
+###
+
+DELETE {{SoundSticker_HostAddress}}/api/stickers/{{StickerId}}/favorite
+Accept: application/json
+
+###
+
 DELETE {{SoundSticker_HostAddress}}/api/stickers/{{StickerId}}

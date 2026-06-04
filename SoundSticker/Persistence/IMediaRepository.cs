@@ -29,4 +29,12 @@ public interface IMediaRepository
     IReadOnlyCollection<Sticker> GetPublicStickers();
 
     Sticker? RemoveSticker(Guid id);
+
+    void AddStickerFavorite(Guid stickerId, string ownerUserId);
+
+    void RemoveStickerFavorite(Guid stickerId, string ownerUserId);
+
+    bool IsStickerFavorite(Guid stickerId, string ownerUserId);
+
+    IReadOnlyCollection<Guid> GetFavoriteStickerIdsByOwner(string ownerUserId);
 }

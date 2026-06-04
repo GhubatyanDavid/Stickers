@@ -49,6 +49,13 @@ public sealed class PostgreSqlSchemaInitializer(
                 completed_at timestamp with time zone NULL
             );
 
+            CREATE TABLE IF NOT EXISTS sticker_favorites (
+                sticker_id uuid NOT NULL REFERENCES stickers(id) ON DELETE CASCADE,
+                owner_user_id text NOT NULL,
+                created_at timestamp with time zone NOT NULL,
+                PRIMARY KEY (sticker_id, owner_user_id)
+            );
+
             ALTER TABLE media_files
                 ADD COLUMN IF NOT EXISTS owner_user_id text NOT NULL DEFAULT 'legacy';
 
@@ -70,6 +77,7 @@ public sealed class PostgreSqlSchemaInitializer(
             CREATE INDEX IF NOT EXISTS ix_stickers_owner_created_at ON stickers (owner_user_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS ix_stickers_public_ready_created_at ON stickers (is_public, status, created_at DESC);
             CREATE INDEX IF NOT EXISTS ix_stickers_status ON stickers (status);
+            CREATE INDEX IF NOT EXISTS ix_sticker_favorites_owner_created_at ON sticker_favorites (owner_user_id, created_at DESC);
             """);
 
         await command.ExecuteNonQueryAsync(cancellationToken);

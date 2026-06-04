@@ -25,7 +25,11 @@ public sealed record StickerResponse(
     DateTimeOffset CreatedAt,
     DateTimeOffset? CompletedAt)
 {
-    public static StickerResponse FromDomain(Sticker sticker, MediaKind sourceKind, bool isDelete = false) =>
+    public static StickerResponse FromDomain(
+        Sticker sticker,
+        MediaKind sourceKind,
+        bool isFavorite = false,
+        bool isDelete = false) =>
         new(
             sticker.Id,
             sticker.SourceMediaId,
@@ -41,7 +45,7 @@ public sealed record StickerResponse(
             sticker.OutputFormat,
             sticker.Shape,
             sticker.IsPublic,
-            false,
+            isFavorite,
             isDelete,
             GetSourceType(sourceKind),
             sticker.OutputUrl,

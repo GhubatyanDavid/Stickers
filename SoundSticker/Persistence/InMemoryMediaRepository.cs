@@ -7,6 +7,7 @@ public sealed class InMemoryMediaRepository : IMediaRepository
 {
     private readonly ConcurrentDictionary<Guid, MediaFile> _mediaFiles = [];
     private readonly ConcurrentDictionary<Guid, Sticker> _stickers = [];
+    private readonly ConcurrentDictionary<(Guid StickerId, string OwnerUserId), byte> _stickerFavorites = [];
 
     public void AddMediaFile(MediaFile mediaFile)
     {
@@ -67,5 +68,34 @@ public sealed class InMemoryMediaRepository : IMediaRepository
             .ToArray();
 
     public Sticker? RemoveSticker(Guid id) =>
-        _stickers.TryRemove(id, out var sticker) ? sticker : null;
+        _stickers.TryRemove(id, out var sticker) ? RemoveStickerFavorites(id, sticker) : null;
+
+    public void AddStickerFavorite(Guid stickerId, string ownerUserId)
+    {
+        _stickerFavorites[(stickerId, ownerUserId)] = 0;
+    }
+
+    public void RemoveStickerFavorite(Guid stickerId, string ownerUserId)
+    {
+        _stickerFavorites.TryRemove((stickerId, ownerUserId), out _);
+    }
+
+    public bool IsStickerFavorite(Guid stickerId, string ownerUserId) =>
+        _stickerFavorites.ContainsKey((stickerId, ownerUserId));
+
+    public IReadOnlyCollection<Guid> GetFavoriteStickerIdsByOwner(string ownerUserId) =>
+        _stickerFavorites.Keys
+            .Where(favorite => favorite.OwnerUserId == ownerUserId)
+            .Select(favorite => favorite.StickerId)
+            .ToHashSet();
+
+    private Sticker RemoveStickerFavorites(Guid id, Sticker sticker)
+    {
+        foreach (var favorite in _stickerFavorites.Keys.Where(favorite => favorite.StickerId == id).ToArray())
+        {
+            _stickerFavorites.TryRemove(favorite, out _);
+        }
+
+        return sticker;
+    }
 }

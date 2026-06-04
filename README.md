@@ -114,6 +114,8 @@ GET  /api/stickers/my
 GET  /api/stickers/all
 GET  /api/stickers/{id}
 GET  /api/stickers/{id}/status
+POST /api/stickers/{id}/favorite
+DELETE /api/stickers/{id}/favorite
 DELETE /api/stickers/{id}
 ```
 
@@ -146,6 +148,9 @@ user's deleted sticker and `{ "isDelete": false }` when it is missing or belongs
 to another user.
 Sticker list/get responses also include `isDelete`; the frontend can show the
 delete button only when that value is `true`.
+Sticker list/get responses include `isFavorite` for the current user. Use
+`POST /api/stickers/{id}/favorite` and `DELETE /api/stickers/{id}/favorite` to
+update it.
 
 Use one time range for video and a different time range for audio from the same
 video:

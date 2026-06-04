@@ -82,6 +82,22 @@ public static class StickerEndpoints
             .Produces<ProblemResponse>(StatusCodes.Status404NotFound)
             .Produces<ProblemResponse>(StatusCodes.Status409Conflict);
 
+        api.MapPost("/stickers/{id:guid}/favorite", FavoriteSticker)
+            .WithName("FavoriteSticker")
+            .WithSummary("Favorite visible sticker")
+            .WithDescription("Marks a visible sticker as favorite for the current X-User-Id.")
+            .Produces<StickerFavoriteResponse>()
+            .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized)
+            .Produces<ProblemResponse>(StatusCodes.Status404NotFound);
+
+        api.MapDelete("/stickers/{id:guid}/favorite", UnfavoriteSticker)
+            .WithName("UnfavoriteSticker")
+            .WithSummary("Unfavorite visible sticker")
+            .WithDescription("Removes a visible sticker from the current X-User-Id favorites.")
+            .Produces<StickerFavoriteResponse>()
+            .Produces<ProblemResponse>(StatusCodes.Status401Unauthorized)
+            .Produces<ProblemResponse>(StatusCodes.Status404NotFound);
+
         api.MapDelete("/stickers/{id:guid}", DeleteSticker)
             .WithName("DeleteSticker")
             .WithSummary("Delete my sticker")
@@ -132,7 +148,8 @@ public static class StickerEndpoints
     {
         var ownerUserId = currentUser.UserId;
         logger.LogInformation("My sticker list requested. OwnerUserId: {OwnerUserId}.", ownerUserId);
-        var stickers = repository.GetStickersByOwner(ownerUserId).Select(sticker => ToStickerResponse(sticker, repository, ownerUserId)).ToArray();
+        var favoriteStickerIds = repository.GetFavoriteStickerIdsByOwner(ownerUserId).ToHashSet();
+        var stickers = repository.GetStickersByOwner(ownerUserId).Select(sticker => ToStickerResponse(sticker, repository, ownerUserId, favoriteStickerIds)).ToArray();
         logger.LogInformation("My sticker list returned. OwnerUserId: {OwnerUserId}. Count: {StickerCount}.", ownerUserId, stickers.Length);
         return Results.Ok(stickers);
     }
@@ -141,7 +158,8 @@ public static class StickerEndpoints
     {
         var ownerUserId = currentUser.UserId;
         logger.LogInformation("Visible sticker list requested. OwnerUserId: {OwnerUserId}.", ownerUserId);
-        var stickers = repository.GetVisibleStickersForOwner(ownerUserId).Select(sticker => ToStickerResponse(sticker, repository, ownerUserId)).ToArray();
+        var favoriteStickerIds = repository.GetFavoriteStickerIdsByOwner(ownerUserId).ToHashSet();
+        var stickers = repository.GetVisibleStickersForOwner(ownerUserId).Select(sticker => ToStickerResponse(sticker, repository, ownerUserId, favoriteStickerIds)).ToArray();
         logger.LogInformation("Visible sticker list returned. OwnerUserId: {OwnerUserId}. Count: {StickerCount}.", ownerUserId, stickers.Length);
         return Results.Ok(stickers);
     }
@@ -542,6 +560,48 @@ public static class StickerEndpoints
         return Results.File(fullPath, GetOutputContentType(sticker.OutputFormat), $"{id:N}{GetOutputExtension(sticker.OutputFormat)}");
     }
 
+    private static IResult FavoriteSticker(
+        Guid id,
+        IMediaRepository repository,
+        ICurrentUser currentUser,
+        ILogger<Program> logger)
+    {
+        var ownerUserId = currentUser.UserId;
+        logger.LogInformation("Sticker favorite requested. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}.", id, ownerUserId);
+
+        var sticker = repository.GetSticker(id);
+        if (sticker is null || !CanReadStickerForUser(sticker, ownerUserId))
+        {
+            logger.LogWarning("Sticker favorite skipped because sticker was not visible. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}.", id, ownerUserId);
+            return Results.NotFound(new ProblemResponse("Sticker was not found."));
+        }
+
+        repository.AddStickerFavorite(id, ownerUserId);
+        logger.LogInformation("Sticker favorited. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}.", id, ownerUserId);
+        return Results.Ok(new StickerFavoriteResponse(true));
+    }
+
+    private static IResult UnfavoriteSticker(
+        Guid id,
+        IMediaRepository repository,
+        ICurrentUser currentUser,
+        ILogger<Program> logger)
+    {
+        var ownerUserId = currentUser.UserId;
+        logger.LogInformation("Sticker unfavorite requested. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}.", id, ownerUserId);
+
+        var sticker = repository.GetSticker(id);
+        if (sticker is null || !CanReadStickerForUser(sticker, ownerUserId))
+        {
+            logger.LogWarning("Sticker unfavorite skipped because sticker was not visible. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}.", id, ownerUserId);
+            return Results.NotFound(new ProblemResponse("Sticker was not found."));
+        }
+
+        repository.RemoveStickerFavorite(id, ownerUserId);
+        logger.LogInformation("Sticker unfavorited. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}.", id, ownerUserId);
+        return Results.Ok(new StickerFavoriteResponse(false));
+    }
+
     private static IResult DeleteSticker(
         Guid id,
         IMediaRepository repository,
@@ -616,10 +676,9 @@ public static class StickerEndpoints
 
     private static bool CanReadSticker(Sticker sticker, ICurrentUser currentUser, out string? requestUserId)
     {
-        if (TryGetRequestUserId(currentUser, out requestUserId))
+        if (TryGetRequestUserId(currentUser, out requestUserId) && requestUserId is not null)
         {
-            return sticker.OwnerUserId == requestUserId ||
-                sticker is { IsPublic: true, Status: StickerStatus.Ready };
+            return CanReadStickerForUser(sticker, requestUserId);
         }
 
         if (sticker is { IsPublic: true, Status: StickerStatus.Ready })
@@ -629,6 +688,10 @@ public static class StickerEndpoints
 
         throw new MissingUserIdException();
     }
+
+    private static bool CanReadStickerForUser(Sticker sticker, string ownerUserId) =>
+        sticker.OwnerUserId == ownerUserId ||
+        sticker is { IsPublic: true, Status: StickerStatus.Ready };
 
     private static bool TryGetRequestUserId(ICurrentUser currentUser, out string? requestUserId)
     {
@@ -644,9 +707,15 @@ public static class StickerEndpoints
         }
     }
 
-    private static StickerResponse ToStickerResponse(Sticker sticker, IMediaRepository repository, string? currentUserId)
+    private static StickerResponse ToStickerResponse(
+        Sticker sticker,
+        IMediaRepository repository,
+        string? currentUserId,
+        IReadOnlySet<Guid>? favoriteStickerIds = null)
     {
         var sourceKind = repository.GetMediaFile(sticker.SourceMediaId)?.Kind ?? MediaKind.Video;
-        return StickerResponse.FromDomain(sticker, sourceKind, sticker.OwnerUserId == currentUserId);
+        var isFavorite = currentUserId is not null &&
+            (favoriteStickerIds?.Contains(sticker.Id) ?? repository.IsStickerFavorite(sticker.Id, currentUserId));
+        return StickerResponse.FromDomain(sticker, sourceKind, isFavorite, sticker.OwnerUserId == currentUserId);
     }
 }

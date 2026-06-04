@@ -91,6 +91,8 @@ GET  /api/stickers/all                    public ready stickers only
 GET  /api/stickers/{id}                   owned or ready public sticker
 GET  /api/stickers/{id}/status            owned or ready public sticker
 GET  /api/stickers/{id}/download          owned or ready public sticker
+POST /api/stickers/{id}/favorite          owned or ready public sticker
+DELETE /api/stickers/{id}/favorite        owned or ready public sticker
 DELETE /api/stickers/{id}                 X-User-Id required, returns isDelete
 ```
 
@@ -122,6 +124,9 @@ stickers from other users, which is the easiest endpoint for a signed-in
 frontend feed.
 Sticker responses include `isDelete`; show the delete button only when it is
 `true`.
+Sticker responses include `isFavorite` for the current user. Use
+`POST /api/stickers/{id}/favorite` to set it true and
+`DELETE /api/stickers/{id}/favorite` to set it false.
 
 `POST /api/stickers/from-image` accepts the same request shape. For image
 sources, use `"Mute"` or `"UseMedia"` because images do not have original
