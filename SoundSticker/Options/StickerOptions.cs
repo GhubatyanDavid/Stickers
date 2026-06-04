@@ -6,7 +6,7 @@ public sealed class StickerOptions
 
     public int MaxDurationMs { get; set; } = 30_000;
 
-    public int ProcessingTimeoutSeconds { get; set; } = 45;
+    public int ProcessingTimeoutSeconds { get; set; } = 180;
 
     public int OutputFps { get; set; } = 24;
 
