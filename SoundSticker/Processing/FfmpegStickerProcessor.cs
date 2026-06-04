@@ -57,7 +57,7 @@ public sealed class FfmpegStickerProcessor(
             startInfo.ArgumentList.Add("-loop");
             startInfo.ArgumentList.Add("1");
             startInfo.ArgumentList.Add("-framerate");
-            startInfo.ArgumentList.Add(GetOutputFps(options).ToString(CultureInfo.InvariantCulture));
+            startInfo.ArgumentList.Add(GetVisualOutputFps(sticker.OutputFormat, options).ToString(CultureInfo.InvariantCulture));
             startInfo.ArgumentList.Add("-t");
             startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
         }
@@ -257,8 +257,8 @@ public sealed class FfmpegStickerProcessor(
         StickerOptions options,
         bool allowTransparentMask)
     {
-        var fps = GetOutputFps(options);
-        var maxDimension = GetEvenDimension(GetMaxOutputDimension(options));
+        var fps = GetVisualOutputFps(sticker.OutputFormat, options);
+        var maxDimension = GetEvenDimension(GetVisualMaxOutputDimension(sticker.OutputFormat, options));
         var filters = new List<string>
         {
             $"fps={fps}",
@@ -275,7 +275,7 @@ public sealed class FfmpegStickerProcessor(
         if (sticker.Shape == StickerShape.Circle && allowTransparentMask)
         {
             filters.Add("format=rgba");
-            filters.Add(BuildCircleAlphaMask());
+            filters.Add(BuildCircleAlphaMask(sticker.RemoveBackground));
         }
 
         return string.Join(",", filters);
@@ -299,8 +299,11 @@ public sealed class FfmpegStickerProcessor(
             _ => (maxDimension, maxDimension)
         };
 
-    private static string BuildCircleAlphaMask() =>
-        "geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte((X-W/2)*(X-W/2)+(Y-H/2)*(Y-H/2),(W/2)*(W/2)),alpha(X,Y),0)'";
+    private static string BuildCircleAlphaMask(bool preserveExistingAlpha)
+    {
+        var insideAlpha = preserveExistingAlpha ? "alpha(X,Y)" : "255";
+        return $"geq=a='if(lte((X-W/2)*(X-W/2)+(Y-H/2)*(Y-H/2),(W/2)*(W/2)),{insideAlpha},0)'";
+    }
 
     private static string BuildBackgroundRemovalFilter(Sticker sticker)
     {
@@ -323,6 +326,19 @@ public sealed class FfmpegStickerProcessor(
 
     private static int GetMaxOutputDimension(StickerOptions options) =>
         Math.Clamp(options.MaxOutputDimension, 128, 1280);
+
+    private static int GetVisualOutputFps(StickerOutputFormat outputFormat, StickerOptions options) =>
+        outputFormat == StickerOutputFormat.Gif
+            ? Math.Clamp(Math.Min(options.OutputFps, 12), 8, 15)
+            : GetOutputFps(options);
+
+    private static int GetVisualMaxOutputDimension(StickerOutputFormat outputFormat, StickerOptions options)
+    {
+        var maxDimension = GetMaxOutputDimension(options);
+        return outputFormat == StickerOutputFormat.Gif
+            ? Math.Min(maxDimension, 384)
+            : maxDimension;
+    }
 
     private static int GetEvenDimension(int dimension) =>
         dimension % 2 == 0 ? dimension : dimension - 1;
