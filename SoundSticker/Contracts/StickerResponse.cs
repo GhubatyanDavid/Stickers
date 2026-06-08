@@ -35,7 +35,8 @@ public sealed record StickerResponse(
         Sticker sticker,
         MediaKind sourceKind,
         bool isFavorite = false,
-        bool isDelete = false) =>
+        bool isDelete = false,
+        string? currentUserId = null) =>
         new(
             sticker.Id,
             sticker.SourceMediaId,
@@ -59,7 +60,7 @@ public sealed record StickerResponse(
             isDelete,
             GetSourceType(sourceKind),
             sticker.OutputUrl,
-            GetDownloadUrl(sticker),
+            GetDownloadUrl(sticker, currentUserId),
             GetOutputFileName(sticker),
             sticker.ErrorMessage,
             sticker.CreatedAt,
@@ -73,8 +74,18 @@ public sealed record StickerResponse(
             _ => "video"
         };
 
-    private static string? GetDownloadUrl(Sticker sticker) =>
-        sticker.Status == StickerStatus.Ready ? $"/api/stickers/{sticker.Id}/download" : null;
+    private static string? GetDownloadUrl(Sticker sticker, string? currentUserId)
+    {
+        if (sticker.Status != StickerStatus.Ready)
+        {
+            return null;
+        }
+
+        var downloadUrl = $"/api/stickers/{sticker.Id}/download";
+        return string.IsNullOrWhiteSpace(currentUserId)
+            ? downloadUrl
+            : $"{downloadUrl}?userId={Uri.EscapeDataString(currentUserId)}";
+    }
 
     private static string? GetOutputFileName(Sticker sticker) =>
         sticker.Status == StickerStatus.Ready ? $"{sticker.Id:N}{GetOutputExtension(sticker)}" : null;

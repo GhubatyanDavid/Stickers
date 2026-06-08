@@ -740,6 +740,10 @@ Recommended frontend behavior:
 - Use `sticker.downloadUrl` as the link target.
 - Use `sticker.outputFileName` for the HTML `download` attribute.
 - Do not hardcode `.mp4`; GIF stickers should keep `.gif`.
+- `downloadUrl` includes `?userId=...` for signed-in users so Android browser
+  or WebView downloads can work without custom request headers.
+- On Android WebView, handle downloads through the native download listener or
+  DownloadManager; a plain `fetch` blob flow may not save files reliably.
 
 ### POST /api/stickers/{id}/favorite
 

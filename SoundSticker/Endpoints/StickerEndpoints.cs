@@ -11,6 +11,8 @@ namespace SoundSticker.Endpoints;
 
 public static class StickerEndpoints
 {
+    private const string UserIdQueryParameterName = "userId";
+
     public static RouteGroupBuilder MapStickerEndpoints(this RouteGroupBuilder api)
     {
         api.MapPost("/stickers/from-video", CreateVideoStickerAsync)
@@ -229,7 +231,7 @@ public static class StickerEndpoints
             sticker.Shape,
             sticker.ErrorMessage,
             sticker.OutputUrl,
-            GetDownloadUrl(sticker),
+            GetDownloadUrl(sticker, requestUserId),
             GetOutputFileName(sticker)));
     }
 
@@ -549,6 +551,7 @@ public static class StickerEndpoints
         IMediaRepository repository,
         IStoredFileManager storedFileManager,
         ICurrentUser currentUser,
+        HttpContext httpContext,
         ILogger<Program> logger)
     {
         logger.LogInformation("Sticker download requested. StickerId: {StickerId}.", id);
@@ -560,7 +563,7 @@ public static class StickerEndpoints
             return Results.NotFound(new ProblemResponse("Sticker was not found."));
         }
 
-        if (!CanReadSticker(sticker, currentUser, out var requestUserId))
+        if (!CanDownloadSticker(sticker, currentUser, httpContext, out var requestUserId))
         {
             logger.LogWarning(
                 "Sticker download forbidden. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}. RequestUserId: {RequestUserId}.",
@@ -720,8 +723,18 @@ public static class StickerEndpoints
         };
     }
 
-    private static string? GetDownloadUrl(Sticker sticker) =>
-        sticker.Status == StickerStatus.Ready ? $"/api/stickers/{sticker.Id}/download" : null;
+    private static string? GetDownloadUrl(Sticker sticker, string? currentUserId)
+    {
+        if (sticker.Status != StickerStatus.Ready)
+        {
+            return null;
+        }
+
+        var downloadUrl = $"/api/stickers/{sticker.Id}/download";
+        return string.IsNullOrWhiteSpace(currentUserId)
+            ? downloadUrl
+            : $"{downloadUrl}?{UserIdQueryParameterName}={Uri.EscapeDataString(currentUserId)}";
+    }
 
     private static string? GetOutputFileName(Sticker sticker) =>
         sticker.Status == StickerStatus.Ready ? $"{sticker.Id:N}{GetOutputExtension(GetDownloadOutputFormat(sticker))}" : null;
@@ -780,6 +793,31 @@ public static class StickerEndpoints
         sticker.OwnerUserId == ownerUserId ||
         sticker is { IsPublic: true, Status: StickerStatus.Ready };
 
+    private static bool CanDownloadSticker(
+        Sticker sticker,
+        ICurrentUser currentUser,
+        HttpContext httpContext,
+        out string? requestUserId)
+    {
+        if (TryGetRequestUserId(currentUser, out requestUserId) && requestUserId is not null)
+        {
+            return CanReadStickerForUser(sticker, requestUserId);
+        }
+
+        requestUserId = httpContext.Request.Query[UserIdQueryParameterName].ToString().Trim();
+        if (!string.IsNullOrWhiteSpace(requestUserId))
+        {
+            return CanReadStickerForUser(sticker, requestUserId);
+        }
+
+        if (sticker is { IsPublic: true, Status: StickerStatus.Ready })
+        {
+            return true;
+        }
+
+        throw new MissingUserIdException();
+    }
+
     private static bool TryGetRequestUserId(ICurrentUser currentUser, out string? requestUserId)
     {
         try
@@ -803,6 +841,6 @@ public static class StickerEndpoints
         var sourceKind = repository.GetMediaFile(sticker.SourceMediaId)?.Kind ?? MediaKind.Video;
         var isFavorite = currentUserId is not null &&
             (favoriteStickerIds?.Contains(sticker.Id) ?? repository.IsStickerFavorite(sticker.Id, currentUserId));
-        return StickerResponse.FromDomain(sticker, sourceKind, isFavorite, sticker.OwnerUserId == currentUserId);
+        return StickerResponse.FromDomain(sticker, sourceKind, isFavorite, sticker.OwnerUserId == currentUserId, currentUserId);
     }
 }
