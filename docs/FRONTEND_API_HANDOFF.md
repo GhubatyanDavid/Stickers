@@ -69,7 +69,8 @@ All JSON enum values are serialized as strings.
 5. Create a sticker job with `POST /api/stickers/from-video` or
    `POST /api/stickers/from-image`.
 6. Poll `GET /api/stickers/{id}/status` until status is `Ready` or `Failed`.
-7. When ready, play or download `outputUrl`.
+7. When ready, play `outputUrl` or download through `downloadUrl` using
+   `outputFileName`.
 
 ## Shared Types
 
@@ -206,6 +207,8 @@ Notes:
   "isDelete": true,
   "sourceType": "video",
   "outputUrl": null,
+  "downloadUrl": null,
+  "outputFileName": null,
   "errorMessage": null,
   "createdAt": "2026-05-22T18:30:00+00:00",
   "completedAt": null
@@ -228,7 +231,9 @@ Notes:
   "outputFormat": "Mp4",
   "shape": "Original",
   "errorMessage": null,
-  "outputUrl": "/media/stickers/59936b114a0c4f62bc2fbf6516e23f81.mp4"
+  "outputUrl": "/media/stickers/59936b114a0c4f62bc2fbf6516e23f81.mp4",
+  "downloadUrl": "/api/stickers/59936b11-4a0c-4f62-bc2f-bf6516e23f81/download",
+  "outputFileName": "59936b114a0c4f62bc2fbf6516e23f81.mp4"
 }
 ```
 
@@ -714,8 +719,27 @@ Recommended polling behavior:
 
 - Poll every 1-2 seconds after receiving `202 Accepted`.
 - Stop polling when status is `Ready` or `Failed`.
-- When `Ready`, use `outputUrl`.
+- When `Ready`, use `outputUrl` for playback and `downloadUrl` for downloads.
 - When `Failed`, show `errorMessage`.
+
+### GET /api/stickers/{id}/download
+
+Purpose:
+
+- Download the generated MP4 or GIF file.
+- The backend sets the download filename and content type from the actual saved
+  output file extension, so GIF stickers download as `.gif`.
+
+Success:
+
+- `200 OK`
+- File response.
+
+Recommended frontend behavior:
+
+- Use `sticker.downloadUrl` as the link target.
+- Use `sticker.outputFileName` for the HTML `download` attribute.
+- Do not hardcode `.mp4`; GIF stickers should keep `.gif`.
 
 ### POST /api/stickers/{id}/favorite
 

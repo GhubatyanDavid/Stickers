@@ -25,6 +25,8 @@ public sealed record StickerResponse(
     bool IsDelete,
     string SourceType,
     string? OutputUrl,
+    string? DownloadUrl,
+    string? OutputFileName,
     string? ErrorMessage,
     DateTimeOffset CreatedAt,
     DateTimeOffset? CompletedAt)
@@ -57,6 +59,8 @@ public sealed record StickerResponse(
             isDelete,
             GetSourceType(sourceKind),
             sticker.OutputUrl,
+            GetDownloadUrl(sticker),
+            GetOutputFileName(sticker),
             sticker.ErrorMessage,
             sticker.CreatedAt,
             sticker.CompletedAt);
@@ -68,4 +72,25 @@ public sealed record StickerResponse(
             MediaKind.Gif => "gif",
             _ => "video"
         };
+
+    private static string? GetDownloadUrl(Sticker sticker) =>
+        sticker.Status == StickerStatus.Ready ? $"/api/stickers/{sticker.Id}/download" : null;
+
+    private static string? GetOutputFileName(Sticker sticker) =>
+        sticker.Status == StickerStatus.Ready ? $"{sticker.Id:N}{GetOutputExtension(sticker)}" : null;
+
+    private static string GetOutputExtension(Sticker sticker)
+    {
+        var outputExtension = Path.GetExtension(sticker.OutputRelativePath) ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(outputExtension))
+        {
+            return outputExtension.ToLowerInvariant();
+        }
+
+        return sticker.OutputFormat switch
+        {
+            StickerOutputFormat.Gif => ".gif",
+            _ => ".mp4"
+        };
+    }
 }

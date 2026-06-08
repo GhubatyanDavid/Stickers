@@ -8,4 +8,6 @@ public sealed record StickerStatusResponse(
     StickerOutputFormat OutputFormat,
     StickerShape Shape,
     string? ErrorMessage,
-    string? OutputUrl);
+    string? OutputUrl,
+    string? DownloadUrl,
+    string? OutputFileName);

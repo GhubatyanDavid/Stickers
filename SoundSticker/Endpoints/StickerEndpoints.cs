@@ -222,7 +222,15 @@ public static class StickerEndpoints
             sticker.Status,
             sticker.OutputUrl,
             sticker.ErrorMessage);
-        return Results.Ok(new StickerStatusResponse(sticker.Id, sticker.Status, sticker.OutputFormat, sticker.Shape, sticker.ErrorMessage, sticker.OutputUrl));
+        return Results.Ok(new StickerStatusResponse(
+            sticker.Id,
+            sticker.Status,
+            sticker.OutputFormat,
+            sticker.Shape,
+            sticker.ErrorMessage,
+            sticker.OutputUrl,
+            GetDownloadUrl(sticker),
+            GetOutputFileName(sticker)));
     }
 
     private static async Task<IResult> CreateStickerAsync(
@@ -579,8 +587,15 @@ public static class StickerEndpoints
             return Results.NotFound(new ProblemResponse("Sticker output file was not found."));
         }
 
-        logger.LogInformation("Sticker download started. StickerId: {StickerId}. FullPath: {FullPath}.", id, fullPath);
-        return Results.File(fullPath, GetOutputContentType(sticker.OutputFormat), $"{id:N}{GetOutputExtension(sticker.OutputFormat)}");
+        var downloadFormat = GetDownloadOutputFormat(sticker);
+        var downloadFileName = $"{id:N}{GetOutputExtension(downloadFormat)}";
+        logger.LogInformation(
+            "Sticker download started. StickerId: {StickerId}. FullPath: {FullPath}. ContentType: {ContentType}. FileName: {FileName}.",
+            id,
+            fullPath,
+            GetOutputContentType(downloadFormat),
+            downloadFileName);
+        return Results.File(fullPath, GetOutputContentType(downloadFormat), downloadFileName);
     }
 
     private static IResult FavoriteSticker(
@@ -693,6 +708,23 @@ public static class StickerEndpoints
             StickerOutputFormat.Gif => ".gif",
             _ => ".mp4"
         };
+
+    private static StickerOutputFormat GetDownloadOutputFormat(Sticker sticker)
+    {
+        var outputExtension = Path.GetExtension(sticker.OutputRelativePath) ?? string.Empty;
+        return outputExtension.ToLowerInvariant() switch
+        {
+            ".gif" => StickerOutputFormat.Gif,
+            ".mp4" => StickerOutputFormat.Mp4,
+            _ => sticker.OutputFormat
+        };
+    }
+
+    private static string? GetDownloadUrl(Sticker sticker) =>
+        sticker.Status == StickerStatus.Ready ? $"/api/stickers/{sticker.Id}/download" : null;
+
+    private static string? GetOutputFileName(Sticker sticker) =>
+        sticker.Status == StickerStatus.Ready ? $"{sticker.Id:N}{GetOutputExtension(GetDownloadOutputFormat(sticker))}" : null;
 
     private static bool IsOutsideMediaDuration(int trimEndMs, MediaFile mediaFile) =>
         mediaFile.Preview?.DurationMs is long durationMs && trimEndMs > durationMs;
