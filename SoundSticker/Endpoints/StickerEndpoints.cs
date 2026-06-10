@@ -400,14 +400,14 @@ public static class StickerEndpoints
             return Results.BadRequest(new ProblemResponse($"Sticker name can be at most {MaxStickerNameLength} characters."));
         }
 
-        if (request.OutputFormat == StickerOutputFormat.Gif && request.AudioMode != StickerAudioMode.Mute)
+        if (RequiresMutedAudio(request.OutputFormat) && request.AudioMode != StickerAudioMode.Mute)
         {
-            return Results.BadRequest(new ProblemResponse("GIF output does not support audio. Use Mute audio mode."));
+            return Results.BadRequest(new ProblemResponse($"{request.OutputFormat} output does not support audio. Use Mute audio mode."));
         }
 
-        if (request.Shape == StickerShape.Circle && request.OutputFormat != StickerOutputFormat.Gif)
+        if (request.Shape == StickerShape.Circle && !SupportsTransparentStickerOutput(request.OutputFormat))
         {
-            return Results.BadRequest(new ProblemResponse("Circle shape requires GIF output because MP4 does not support transparent sticker edges."));
+            return Results.BadRequest(new ProblemResponse("Circle shape requires GIF or Webp output because MP4 does not support transparent sticker edges."));
         }
 
         if (request.RemoveBackground)
@@ -417,9 +417,9 @@ public static class StickerEndpoints
                 return Results.BadRequest(new ProblemResponse("Background removal is currently supported only for image and GIF sources."));
             }
 
-            if (request.OutputFormat != StickerOutputFormat.Gif)
+            if (!SupportsTransparentStickerOutput(request.OutputFormat))
             {
-                return Results.BadRequest(new ProblemResponse("Background removal requires GIF output because MP4 does not support transparent sticker backgrounds."));
+                return Results.BadRequest(new ProblemResponse("Background removal requires GIF or Webp output because MP4 does not support transparent sticker backgrounds."));
             }
 
             if (!IsValidBackgroundColor(request.BackgroundColor))
@@ -711,6 +711,7 @@ public static class StickerEndpoints
         outputFormat switch
         {
             StickerOutputFormat.Gif => "image/gif",
+            StickerOutputFormat.Webp => "image/webp",
             _ => "video/mp4"
         };
 
@@ -718,6 +719,7 @@ public static class StickerEndpoints
         outputFormat switch
         {
             StickerOutputFormat.Gif => ".gif",
+            StickerOutputFormat.Webp => ".webp",
             _ => ".mp4"
         };
 
@@ -727,10 +729,17 @@ public static class StickerEndpoints
         return outputExtension.ToLowerInvariant() switch
         {
             ".gif" => StickerOutputFormat.Gif,
+            ".webp" => StickerOutputFormat.Webp,
             ".mp4" => StickerOutputFormat.Mp4,
             _ => sticker.OutputFormat
         };
     }
+
+    private static bool RequiresMutedAudio(StickerOutputFormat outputFormat) =>
+        outputFormat is StickerOutputFormat.Gif or StickerOutputFormat.Webp;
+
+    private static bool SupportsTransparentStickerOutput(StickerOutputFormat outputFormat) =>
+        outputFormat is StickerOutputFormat.Gif or StickerOutputFormat.Webp;
 
     private static string? GetDownloadUrl(Sticker sticker, string? currentUserId)
     {

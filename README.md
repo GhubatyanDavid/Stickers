@@ -147,8 +147,11 @@ Use `GET /api/stickers/my` when the UI needs only the current user's stickers,
 and `GET /api/stickers/all` for the public-ready list without a user header.
 Omit `outputFormat` for MP4, or send `"outputFormat": "Gif"` with
 `"audioMode": "Mute"` for a silent looping GIF.
+Send `"outputFormat": "Webp"` with `"audioMode": "Mute"` for a `.webp` file.
+Image sources produce static WebP; video or GIF sources produce animated WebP.
 Omit `shape` for the source aspect ratio, or send `"Square"`, `"Circle"`,
-`"Portrait"`, or `"Landscape"`; circle output should be a muted GIF.
+`"Portrait"`, or `"Landscape"`; circle output should use a muted transparent
+format such as `"Gif"` or `"Webp"`.
 Use `"removeBackground": true` with image/GIF sources and
 `"outputFormat": "Gif"` to remove a simple solid-color background; pass
 `"backgroundColor"` as a hex color for best results.

@@ -103,6 +103,7 @@ public sealed record StickerResponse(
         return sticker.OutputFormat switch
         {
             StickerOutputFormat.Gif => ".gif",
+            StickerOutputFormat.Webp => ".webp",
             _ => ".mp4"
         };
     }

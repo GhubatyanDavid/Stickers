@@ -71,6 +71,7 @@ public sealed class StoredFileManager(
         outputFormat switch
         {
             StickerOutputFormat.Gif => ".gif",
+            StickerOutputFormat.Webp => ".webp",
             _ => ".mp4"
         };
 }

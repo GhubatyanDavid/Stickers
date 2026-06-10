@@ -31,6 +31,19 @@ Content-Type: application/json
 
 ###
 
+POST {{SoundSticker_HostAddress}}/api/stickers/from-video
+Content-Type: application/json
+
+{
+  "sourceMediaId": "{{MediaId}}",
+  "trimStartMs": 0,
+  "trimEndMs": 5000,
+  "audioMode": "Mute",
+  "outputFormat": "Webp"
+}
+
+###
+
 POST {{SoundSticker_HostAddress}}/api/stickers/from-image
 Content-Type: application/json
 

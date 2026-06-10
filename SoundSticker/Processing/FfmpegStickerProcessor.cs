@@ -54,12 +54,15 @@ public sealed class FfmpegStickerProcessor(
         startInfo.ArgumentList.Add("-nostdin");
         if (sourceMedia.Kind == MediaKind.Image)
         {
-            startInfo.ArgumentList.Add("-loop");
-            startInfo.ArgumentList.Add("1");
-            startInfo.ArgumentList.Add("-framerate");
-            startInfo.ArgumentList.Add(GetVisualOutputFps(sticker.OutputFormat, options).ToString(CultureInfo.InvariantCulture));
-            startInfo.ArgumentList.Add("-t");
-            startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
+            if (!IsStaticWebpSticker(sticker, sourceMedia))
+            {
+                startInfo.ArgumentList.Add("-loop");
+                startInfo.ArgumentList.Add("1");
+                startInfo.ArgumentList.Add("-framerate");
+                startInfo.ArgumentList.Add(GetVisualOutputFps(sticker.OutputFormat, options).ToString(CultureInfo.InvariantCulture));
+                startInfo.ArgumentList.Add("-t");
+                startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
+            }
         }
         else
         {
@@ -72,7 +75,7 @@ public sealed class FfmpegStickerProcessor(
         startInfo.ArgumentList.Add("-i");
         startInfo.ArgumentList.Add(sourcePath);
 
-        if (audioSourceMedia is not null && sticker.OutputFormat == StickerOutputFormat.Mp4)
+        if (audioSourceMedia is not null && SupportsAudio(sticker.OutputFormat))
         {
             startInfo.ArgumentList.Add("-ss");
             startInfo.ArgumentList.Add(ToSeconds(sticker.AudioTrimStartMs));
@@ -94,6 +97,35 @@ public sealed class FfmpegStickerProcessor(
             startInfo.ArgumentList.Add("0");
             startInfo.ArgumentList.Add("-t");
             startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
+        }
+        else if (sticker.OutputFormat == StickerOutputFormat.Webp)
+        {
+            startInfo.ArgumentList.Add("-an");
+            if (IsStaticWebpSticker(sticker, sourceMedia))
+            {
+                startInfo.ArgumentList.Add("-vframes");
+                startInfo.ArgumentList.Add("1");
+                startInfo.ArgumentList.Add("-c:v");
+                startInfo.ArgumentList.Add("libwebp");
+                startInfo.ArgumentList.Add("-lossless");
+                startInfo.ArgumentList.Add("0");
+                startInfo.ArgumentList.Add("-quality");
+                startInfo.ArgumentList.Add("75");
+            }
+            else
+            {
+                startInfo.ArgumentList.Add("-c:v");
+                startInfo.ArgumentList.Add("libwebp_anim");
+                startInfo.ArgumentList.Add("-loop");
+                startInfo.ArgumentList.Add("0");
+                startInfo.ArgumentList.Add("-quality");
+                startInfo.ArgumentList.Add("65");
+                startInfo.ArgumentList.Add("-t");
+                startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
+            }
+
+            startInfo.ArgumentList.Add("-compression_level");
+            startInfo.ArgumentList.Add("6");
         }
         else
         {
@@ -219,6 +251,7 @@ public sealed class FfmpegStickerProcessor(
         return sticker.OutputFormat switch
         {
             StickerOutputFormat.Gif => BuildGifFilterGraph(sticker, options),
+            StickerOutputFormat.Webp => BuildWebpFilterGraph(sticker, options),
             _ => BuildMp4FilterGraph(sticker, options)
         };
     }
@@ -252,6 +285,12 @@ public sealed class FfmpegStickerProcessor(
             "[gif_frames][palette]paletteuse=dither=sierra2_4a:alpha_threshold=128[v]";
     }
 
+    private static string BuildWebpFilterGraph(Sticker sticker, StickerOptions options)
+    {
+        var videoDuration = ToSeconds(sticker.DurationMs);
+        return $"[0:v:0]{BuildVisualFilter(sticker, options, allowTransparentMask: true)},format=rgba,trim=duration={videoDuration},setpts=PTS-STARTPTS[v]";
+    }
+
     private static string BuildVisualFilter(
         Sticker sticker,
         StickerOptions options,
@@ -262,7 +301,7 @@ public sealed class FfmpegStickerProcessor(
         var filters = new List<string>
         {
             $"fps={fps}",
-            BuildShapeFilter(sticker.Shape, maxDimension),
+            BuildShapeFilter(sticker, maxDimension),
             "setsar=1"
         };
 
@@ -281,8 +320,14 @@ public sealed class FfmpegStickerProcessor(
         return string.Join(",", filters);
     }
 
-    private static string BuildShapeFilter(StickerShape shape, int maxDimension)
+    private static string BuildShapeFilter(Sticker sticker, int maxDimension)
     {
+        if (sticker.OutputFormat == StickerOutputFormat.Webp)
+        {
+            return "format=rgba,scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000";
+        }
+
+        var shape = sticker.Shape;
         var (width, height) = GetTargetSize(shape, maxDimension);
         return shape switch
         {
@@ -328,16 +373,19 @@ public sealed class FfmpegStickerProcessor(
         Math.Clamp(options.MaxOutputDimension, 128, 1280);
 
     private static int GetVisualOutputFps(StickerOutputFormat outputFormat, StickerOptions options) =>
-        outputFormat == StickerOutputFormat.Gif
+        outputFormat is StickerOutputFormat.Gif or StickerOutputFormat.Webp
             ? Math.Clamp(Math.Min(options.OutputFps, 12), 8, 15)
             : GetOutputFps(options);
 
     private static int GetVisualMaxOutputDimension(StickerOutputFormat outputFormat, StickerOptions options)
     {
         var maxDimension = GetMaxOutputDimension(options);
-        return outputFormat == StickerOutputFormat.Gif
-            ? Math.Min(maxDimension, 384)
-            : maxDimension;
+        return outputFormat switch
+        {
+            StickerOutputFormat.Gif => Math.Min(maxDimension, 384),
+            StickerOutputFormat.Webp => 512,
+            _ => maxDimension
+        };
     }
 
     private static int GetEvenDimension(int dimension) =>
@@ -347,6 +395,13 @@ public sealed class FfmpegStickerProcessor(
         outputFormat switch
         {
             StickerOutputFormat.Gif => ".gif",
+            StickerOutputFormat.Webp => ".webp",
             _ => ".mp4"
         };
+
+    private static bool SupportsAudio(StickerOutputFormat outputFormat) =>
+        outputFormat == StickerOutputFormat.Mp4;
+
+    private static bool IsStaticWebpSticker(Sticker sticker, MediaFile sourceMedia) =>
+        sticker.OutputFormat == StickerOutputFormat.Webp && sourceMedia.Kind == MediaKind.Image;
 }

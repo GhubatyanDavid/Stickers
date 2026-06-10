@@ -119,10 +119,13 @@ limited to 80 characters.
 Use `"Mute"` for silent stickers.
 Use `"outputFormat": "Gif"` with `"audioMode": "Mute"` to export a silent
 looping GIF. If `outputFormat` is omitted, the backend exports MP4.
+Use `"outputFormat": "Webp"` with `"audioMode": "Mute"` to export a `.webp`
+file. Image sources produce static WebP; video or GIF sources produce animated
+WebP.
 Use `"shape": "Square"` for a square crop, `"shape": "Portrait"` for 4:5, and
 `"shape": "Landscape"` for 16:9. Use `"shape": "Circle"` with
-`"outputFormat": "Gif"` and `"audioMode": "Mute"` for a transparent circular
-GIF sticker.
+`"outputFormat": "Gif"` or `"Webp"` and `"audioMode": "Mute"` for a
+transparent circular sticker.
 Use `"removeBackground": true` with image/GIF sources and
 `"outputFormat": "Gif"` to remove a simple solid-color background. Pass
 `"backgroundColor": "#ffffff"` or another hex color; if omitted, white is used.

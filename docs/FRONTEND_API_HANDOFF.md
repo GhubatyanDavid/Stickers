@@ -105,12 +105,15 @@ Meaning:
 ```text
 Mp4
 Gif
+Webp
 ```
 
 Meaning:
 
 - `Mp4`: export an MP4 video sticker. This is the default when omitted.
 - `Gif`: export a silent looping GIF sticker. Use `audioMode: "Mute"`.
+- `Webp`: export a `.webp` sticker file. Image sources produce static WebP;
+  video/GIF sources produce animated WebP. Use `audioMode: "Mute"`.
 
 ### StickerShape
 
@@ -476,6 +479,22 @@ GIF output is silent and loops forever:
 }
 ```
 
+#### WebP Sticker Request
+
+Exports a `.webp` file. Image sources become static WebP. Video/GIF sources
+become animated WebP. Delivery as a sticker still depends on the receiving app's
+sticker/import/share flow.
+
+```json
+{
+  "sourceMediaId": "uploaded-image-video-or-gif-id",
+  "trimStartMs": 0,
+  "trimEndMs": 5000,
+  "audioMode": "Mute",
+  "outputFormat": "Webp"
+}
+```
+
 #### Square Sticker Request
 
 Center-crop the source into a 1:1 MP4 sticker:
@@ -587,9 +606,10 @@ Trim validation rules:
 - Non-muted audio trim start/end must be valid.
 - Audio trim end must not exceed its selected audio source duration.
 - GIF output must use `audioMode: "Mute"`.
-- Circle shape must use `outputFormat: "Gif"`.
+- `Webp` output must use `audioMode: "Mute"`.
+- Circle shape must use `outputFormat: "Gif"` or `"Webp"`.
 - Background removal must use image/GIF source media.
-- Background removal must use `outputFormat: "Gif"`.
+- Background removal must use `outputFormat: "Gif"` or `"Webp"`.
 - Background color must be a hex color when provided.
 
 Audio duration behavior:
