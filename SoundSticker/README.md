@@ -102,6 +102,7 @@ DELETE /api/stickers/{id}                 X-User-Id required, returns isDelete
 ```json
 {
   "sourceMediaId": "uploaded-video-id",
+  "name": "Funny reaction",
   "trimStartMs": 0,
   "trimEndMs": 5000,
   "audioMode": "KeepOriginal",
@@ -112,6 +113,9 @@ DELETE /api/stickers/{id}                 X-User-Id required, returns isDelete
 }
 ```
 
+Use `"name"` for the display name shown in the UI. If it is omitted, the
+backend uses the source file name without extension. Names are trimmed and
+limited to 80 characters.
 Use `"Mute"` for silent stickers.
 Use `"outputFormat": "Gif"` with `"audioMode": "Mute"` to export a silent
 looping GIF. If `outputFormat` is omitted, the backend exports MP4.

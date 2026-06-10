@@ -12,6 +12,7 @@ namespace SoundSticker.Endpoints;
 public static class StickerEndpoints
 {
     private const string UserIdQueryParameterName = "userId";
+    private const int MaxStickerNameLength = 80;
 
     public static RouteGroupBuilder MapStickerEndpoints(this RouteGroupBuilder api)
     {
@@ -281,6 +282,8 @@ public static class StickerEndpoints
             return validationResult;
         }
 
+        var stickerName = GetStickerName(request.Name, sourceMedia.OriginalFileName);
+
         if (request.CoverImageId.HasValue)
         {
             var coverImage = repository.GetMediaFile(request.CoverImageId.Value);
@@ -311,6 +314,7 @@ public static class StickerEndpoints
 
         var sticker = Sticker.CreateVideoSticker(
             Guid.NewGuid(),
+            stickerName,
             sourceMedia.Id,
             request.CoverImageId,
             audioSourceMedia?.Id,
@@ -389,6 +393,11 @@ public static class StickerEndpoints
         if (!Enum.IsDefined(request.Shape))
         {
             return Results.BadRequest(new ProblemResponse("Sticker shape is invalid."));
+        }
+
+        if (!IsValidStickerName(request.Name))
+        {
+            return Results.BadRequest(new ProblemResponse($"Sticker name can be at most {MaxStickerNameLength} characters."));
         }
 
         if (request.OutputFormat == StickerOutputFormat.Gif && request.AudioMode != StickerAudioMode.Mute)
@@ -773,6 +782,30 @@ public static class StickerEndpoints
 
     private static double GetBackgroundBlend(double? blend) =>
         Math.Clamp(blend ?? 0.08d, 0d, 1d);
+
+    private static bool IsValidStickerName(string? name) =>
+        string.IsNullOrWhiteSpace(name) ||
+        NormalizeWhitespace(name).Length <= MaxStickerNameLength;
+
+    private static string GetStickerName(string? requestedName, string sourceFileName)
+    {
+        var name = string.IsNullOrWhiteSpace(requestedName)
+            ? Path.GetFileNameWithoutExtension(sourceFileName)
+            : requestedName;
+
+        name = NormalizeWhitespace(name);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = "Sticker";
+        }
+
+        return name.Length <= MaxStickerNameLength
+            ? name
+            : name[..MaxStickerNameLength];
+    }
+
+    private static string NormalizeWhitespace(string value) =>
+        string.Join(' ', value.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     private static bool CanReadSticker(Sticker sticker, ICurrentUser currentUser, out string? requestUserId)
     {

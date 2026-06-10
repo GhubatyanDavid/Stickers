@@ -29,6 +29,7 @@ public sealed class PostgreSqlSchemaInitializer(
 
             CREATE TABLE IF NOT EXISTS stickers (
                 id uuid PRIMARY KEY,
+                name text NOT NULL DEFAULT 'Sticker',
                 source_media_id uuid NOT NULL REFERENCES media_files(id) ON DELETE RESTRICT,
                 cover_image_id uuid NULL REFERENCES media_files(id) ON DELETE SET NULL,
                 audio_source_media_id uuid NULL REFERENCES media_files(id) ON DELETE SET NULL,
@@ -62,6 +63,9 @@ public sealed class PostgreSqlSchemaInitializer(
 
             ALTER TABLE media_files
                 ADD COLUMN IF NOT EXISTS owner_user_id text NOT NULL DEFAULT 'legacy';
+
+            ALTER TABLE stickers
+                ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT 'Sticker';
 
             ALTER TABLE stickers
                 ADD COLUMN IF NOT EXISTS owner_user_id text NOT NULL DEFAULT 'legacy';

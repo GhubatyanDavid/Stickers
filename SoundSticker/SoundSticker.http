@@ -23,6 +23,7 @@ Content-Type: application/json
 
 {
   "sourceMediaId": "{{MediaId}}",
+  "name": "Funny reaction",
   "trimStartMs": 0,
   "trimEndMs": 5000,
   "audioMode": "KeepOriginal"

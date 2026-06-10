@@ -186,6 +186,7 @@ Notes:
 ```json
 {
   "id": "59936b11-4a0c-4f62-bc2f-bf6516e23f81",
+  "name": "Funny reaction",
   "sourceMediaId": "3b89e8d8-a1bd-4cb9-b98f-2b86fd7807d5",
   "coverImageId": null,
   "status": "Queued",
@@ -399,6 +400,8 @@ Required fields:
 
 Optional fields:
 
+- `name` display name shown in the UI. If omitted, the backend uses the source
+  file name without extension. Max length: 80 characters.
 - `coverImageId`
 - `audioSourceMediaId`
 - `audioTrimStartMs`
@@ -423,6 +426,7 @@ Use source video frames and source video audio from matching default ranges:
 ```json
 {
   "sourceMediaId": "uploaded-video-id",
+  "name": "Funny reaction",
   "trimStartMs": 0,
   "trimEndMs": 5000,
   "audioMode": "KeepOriginal"

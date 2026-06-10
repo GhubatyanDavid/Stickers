@@ -4,6 +4,7 @@ public sealed class Sticker
 {
     private Sticker(
         Guid id,
+        string name,
         Guid sourceMediaId,
         Guid? coverImageId,
         Guid? audioSourceMediaId,
@@ -24,6 +25,7 @@ public sealed class Sticker
         DateTimeOffset createdAt)
     {
         Id = id;
+        Name = name;
         SourceMediaId = sourceMediaId;
         CoverImageId = coverImageId;
         AudioSourceMediaId = audioSourceMediaId;
@@ -45,6 +47,8 @@ public sealed class Sticker
     }
 
     public Guid Id { get; }
+
+    public string Name { get; }
 
     public Guid SourceMediaId { get; }
 
@@ -96,6 +100,7 @@ public sealed class Sticker
 
     public static Sticker CreateVideoSticker(
         Guid id,
+        string name,
         Guid sourceMediaId,
         Guid? coverImageId,
         Guid? audioSourceMediaId,
@@ -114,6 +119,7 @@ public sealed class Sticker
         bool isPublic) =>
         new(
             id,
+            name,
             sourceMediaId,
             coverImageId,
             audioSourceMediaId,
@@ -135,6 +141,7 @@ public sealed class Sticker
 
     internal static Sticker Restore(
         Guid id,
+        string name,
         Guid sourceMediaId,
         Guid? coverImageId,
         Guid? audioSourceMediaId,
@@ -160,6 +167,7 @@ public sealed class Sticker
     {
         var sticker = new Sticker(
             id,
+            name,
             sourceMediaId,
             coverImageId,
             audioSourceMediaId,

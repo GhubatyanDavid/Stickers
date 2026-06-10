@@ -4,6 +4,7 @@ namespace SoundSticker.Contracts;
 
 public sealed record StickerResponse(
     Guid Id,
+    string Name,
     Guid SourceMediaId,
     Guid? CoverImageId,
     StickerStatus Status,
@@ -39,6 +40,7 @@ public sealed record StickerResponse(
         string? currentUserId = null) =>
         new(
             sticker.Id,
+            sticker.Name,
             sticker.SourceMediaId,
             sticker.CoverImageId,
             sticker.Status,

@@ -10,6 +10,7 @@ public sealed record CreateVideoStickerRequest(
     StickerAudioMode AudioMode,
     StickerOutputFormat OutputFormat = StickerOutputFormat.Mp4,
     StickerShape Shape = StickerShape.Original,
+    string? Name = null,
     bool RemoveBackground = false,
     string? BackgroundColor = null,
     double? BackgroundSimilarity = null,

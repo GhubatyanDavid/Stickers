@@ -26,6 +26,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
 
     private const string StickerColumns = """
         id,
+        name,
         source_media_id,
         cover_image_id,
         audio_source_media_id,
@@ -153,6 +154,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
         using var command = dataSource.CreateCommand("""
             INSERT INTO stickers (
                 id,
+                name,
                 source_media_id,
                 cover_image_id,
                 audio_source_media_id,
@@ -178,6 +180,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
             )
             VALUES (
                 @id,
+                @name,
                 @source_media_id,
                 @cover_image_id,
                 @audio_source_media_id,
@@ -202,6 +205,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
                 @completed_at
             )
             ON CONFLICT (id) DO UPDATE SET
+                name = EXCLUDED.name,
                 source_media_id = EXCLUDED.source_media_id,
                 cover_image_id = EXCLUDED.cover_image_id,
                 audio_source_media_id = EXCLUDED.audio_source_media_id,
@@ -415,6 +419,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
     private static void AddStickerParameters(NpgsqlCommand command, Sticker sticker)
     {
         AddGuid(command, "id", sticker.Id);
+        AddText(command, "name", sticker.Name);
         AddGuid(command, "source_media_id", sticker.SourceMediaId);
         AddNullableGuid(command, "cover_image_id", sticker.CoverImageId);
         AddNullableGuid(command, "audio_source_media_id", sticker.AudioSourceMediaId);
@@ -468,6 +473,7 @@ public sealed class PostgreSqlMediaRepository(NpgsqlDataSource dataSource) : IMe
     private static Sticker ReadSticker(NpgsqlDataReader reader) =>
         Sticker.Restore(
             GetGuid(reader, "id"),
+            GetString(reader, "name"),
             GetGuid(reader, "source_media_id"),
             GetNullableGuid(reader, "cover_image_id"),
             GetNullableGuid(reader, "audio_source_media_id"),

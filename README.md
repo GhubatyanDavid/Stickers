@@ -127,6 +127,7 @@ Create a sticker with the source video's matching audio:
 ```json
 {
   "sourceMediaId": "uploaded-video-id",
+  "name": "Funny reaction",
   "trimStartMs": 0,
   "trimEndMs": 5000,
   "audioMode": "KeepOriginal",
@@ -137,6 +138,9 @@ Create a sticker with the source video's matching audio:
 }
 ```
 
+Use `"name"` for the display name shown in the UI. If omitted, the backend uses
+the uploaded source file name without extension. Names are trimmed and limited
+to 80 characters.
 Use `GET /api/stickers` for the current user's visible feed: that user's own
 private/public stickers plus every ready public sticker from other users.
 Use `GET /api/stickers/my` when the UI needs only the current user's stickers,
