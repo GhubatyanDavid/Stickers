@@ -18,9 +18,11 @@ audio from another uploaded audio or video file.
 - Create video and image sticker jobs with a maximum duration of 30 seconds.
 - Trim the video track and audio track from different time ranges.
 - Reuse audio from the source video or attach audio from another uploaded file.
-- Loop still images into generated MP4 or GIF stickers.
+- Loop still images into generated MP4/GIF stickers or export them as static
+  WebP sticker files.
 - Export silent looping GIF stickers with `outputFormat: "Gif"`.
-- Export static or animated WebP stickers with `outputFormat: "Webp"`.
+- Export Telegram-compatible static WebP sticker files with
+  `outputFormat: "Webp"`.
 - Export square, circle, portrait, and landscape sticker shapes.
 - Remove simple solid-color backgrounds from image and GIF sources.
 - Process stickers asynchronously and query their status.
@@ -59,8 +61,8 @@ Requirements:
 - FFmpeg available in `PATH`, or an explicit `Ffmpeg:ExecutablePath`
 - FFprobe available in `PATH`, or an explicit `Ffmpeg:ProbeExecutablePath` for
   preview duration metadata
-- Google WebP tools available in `PATH` for WebP output. On Ubuntu install the
-  `webp` package, which provides `cwebp` and `img2webp`.
+- Google `cwebp` available in `PATH` for WebP output. On Ubuntu install the
+  `webp` package.
 
 Start the API:
 
@@ -82,8 +84,7 @@ If FFmpeg is not available in `PATH`, configure it in app settings:
   "Ffmpeg": {
     "ExecutablePath": "C:\\path\\to\\ffmpeg.exe",
     "ProbeExecutablePath": "C:\\path\\to\\ffprobe.exe",
-    "CwebpExecutablePath": "C:\\path\\to\\cwebp.exe",
-    "Img2WebpExecutablePath": "C:\\path\\to\\img2webp.exe"
+    "CwebpExecutablePath": "C:\\path\\to\\cwebp.exe"
   }
 }
 ```
@@ -153,8 +154,11 @@ and `GET /api/stickers/all` for the public-ready list without a user header.
 Omit `outputFormat` for MP4, or send `"outputFormat": "Gif"` with
 `"audioMode": "Mute"` for a silent looping GIF.
 Send `"outputFormat": "Webp"` with `"audioMode": "Mute"` for a `.webp` file.
-Image sources produce static WebP with `cwebp`; video or GIF sources produce
-animated WebP with `img2webp` after FFmpeg extracts transparent PNG frames.
+The backend creates a Telegram-compatible static WebP sticker file: it fits
+inside `512x512`, one side is `512px`, and the file is kept within Telegram's
+`512KB` static sticker limit. Video or GIF sources use the first selected frame.
+Sending it as a real Telegram sticker still requires Telegram's sticker import
+or `sendSticker` flow; attaching the file manually may show it as media.
 Omit `shape` for the source aspect ratio, or send `"Square"`, `"Circle"`,
 `"Portrait"`, or `"Landscape"`; circle output should use a muted transparent
 format such as `"Gif"` or `"Webp"`.

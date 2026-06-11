@@ -9,6 +9,4 @@ public sealed class FfmpegOptions
     public string ProbeExecutablePath { get; set; } = "ffprobe";
 
     public string CwebpExecutablePath { get; set; } = "cwebp";
-
-    public string Img2WebpExecutablePath { get; set; } = "img2webp";
 }

@@ -69,15 +69,13 @@ both tools and make sure `ffmpeg` and `ffprobe` are available in `PATH`, or set:
   "Ffmpeg": {
     "ExecutablePath": "C:\\path\\to\\ffmpeg.exe",
     "ProbeExecutablePath": "C:\\path\\to\\ffprobe.exe",
-    "CwebpExecutablePath": "C:\\path\\to\\cwebp.exe",
-    "Img2WebpExecutablePath": "C:\\path\\to\\img2webp.exe"
+    "CwebpExecutablePath": "C:\\path\\to\\cwebp.exe"
   }
 }
 ```
 
 WebP output also needs Google's WebP tools. On Ubuntu install them with
-`sudo apt install webp`; the package provides `cwebp` for static WebP and
-`img2webp` for animated WebP.
+`sudo apt install webp`; the package provides `cwebp`.
 
 ## Current MVP endpoints
 
@@ -126,9 +124,10 @@ Use `"Mute"` for silent stickers.
 Use `"outputFormat": "Gif"` with `"audioMode": "Mute"` to export a silent
 looping GIF. If `outputFormat` is omitted, the backend exports MP4.
 Use `"outputFormat": "Webp"` with `"audioMode": "Mute"` to export a `.webp`
-file. Image sources produce static WebP with `cwebp`; video or GIF sources
-produce animated WebP with `img2webp` after FFmpeg extracts transparent PNG
-frames.
+file. The backend creates a Telegram-compatible static WebP sticker file:
+`512x512` max dimensions, one side exactly `512px`, and `512KB` max output
+size. Video or GIF sources use the first selected frame. Sending it as a real
+Telegram sticker still requires Telegram's sticker import or `sendSticker` flow.
 Use `"shape": "Square"` for a square crop, `"shape": "Portrait"` for 4:5, and
 `"shape": "Landscape"` for 16:9. Use `"shape": "Circle"` with
 `"outputFormat": "Gif"` or `"Webp"` and `"audioMode": "Mute"` for a

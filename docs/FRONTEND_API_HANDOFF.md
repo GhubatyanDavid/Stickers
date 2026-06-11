@@ -28,7 +28,8 @@ All JSON enum values are serialized as strings.
   them.
 - Generate a thumbnail URL for uploaded video and GIF files.
 - Create a moving sticker job from an uploaded video or GIF.
-- Create an image sticker job by looping an uploaded image into MP4 or GIF.
+- Create an image sticker job by looping an uploaded image into MP4/GIF or
+  exporting it as a static WebP sticker file.
 - Export stickers as original aspect, square, circle, portrait, or landscape.
 - Remove simple solid-color backgrounds from image and GIF sources.
 - Use matching audio from the source video.
@@ -114,8 +115,9 @@ Meaning:
 
 - `Mp4`: export an MP4 video sticker. This is the default when omitted.
 - `Gif`: export a silent looping GIF sticker. Use `audioMode: "Mute"`.
-- `Webp`: export a `.webp` sticker file. Image sources produce static WebP;
-  video/GIF sources produce animated WebP. Use `audioMode: "Mute"`.
+- `Webp`: export a Telegram-compatible static `.webp` sticker file. It fits
+  inside `512x512`, has one side exactly `512px`, and is kept under `512KB`.
+  Video/GIF sources use the first selected frame. Use `audioMode: "Mute"`.
 
 ### StickerShape
 
@@ -483,10 +485,11 @@ GIF output is silent and loops forever:
 
 #### WebP Sticker Request
 
-Exports a `.webp` file. Image sources become static WebP through `cwebp`.
-Video/GIF sources become animated WebP through `img2webp` after FFmpeg extracts
-transparent PNG frames. Delivery as a sticker still depends on the receiving
-app's sticker/import/share flow.
+Exports a Telegram-compatible static `.webp` sticker file. The output fits
+inside `512x512`, has one side exactly `512px`, and is kept under Telegram's
+`512KB` static sticker limit. Video/GIF sources use the first selected frame.
+Delivery as a real Telegram sticker still depends on Telegram's sticker import
+or `sendSticker` flow; attaching the file manually may show it as media.
 
 ```json
 {

@@ -13,6 +13,10 @@ public sealed class FfmpegStickerProcessor(
     IWebHostEnvironment environment,
     ILogger<FfmpegStickerProcessor> logger) : IStickerProcessor
 {
+    private const long TelegramStaticStickerMaxBytes = 512 * 1024;
+
+    private static readonly int[] TelegramStaticWebpQualityAttempts = [85, 75, 65, 55, 45, 35, 25, 15];
+
     public async Task<ProcessedStickerFile> ProcessStickerAsync(
         MediaFile sourceMedia,
         MediaFile? audioSourceMedia,
@@ -67,15 +71,12 @@ public sealed class FfmpegStickerProcessor(
         startInfo.ArgumentList.Add("-nostdin");
         if (sourceMedia.Kind == MediaKind.Image)
         {
-            if (!IsStaticWebpSticker(sticker, sourceMedia))
-            {
-                startInfo.ArgumentList.Add("-loop");
-                startInfo.ArgumentList.Add("1");
-                startInfo.ArgumentList.Add("-framerate");
-                startInfo.ArgumentList.Add(GetVisualOutputFps(sticker.OutputFormat, options).ToString(CultureInfo.InvariantCulture));
-                startInfo.ArgumentList.Add("-t");
-                startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
-            }
+            startInfo.ArgumentList.Add("-loop");
+            startInfo.ArgumentList.Add("1");
+            startInfo.ArgumentList.Add("-framerate");
+            startInfo.ArgumentList.Add(GetVisualOutputFps(sticker.OutputFormat, options).ToString(CultureInfo.InvariantCulture));
+            startInfo.ArgumentList.Add("-t");
+            startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
         }
         else
         {
@@ -110,35 +111,6 @@ public sealed class FfmpegStickerProcessor(
             startInfo.ArgumentList.Add("0");
             startInfo.ArgumentList.Add("-t");
             startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
-        }
-        else if (sticker.OutputFormat == StickerOutputFormat.Webp)
-        {
-            startInfo.ArgumentList.Add("-an");
-            if (IsStaticWebpSticker(sticker, sourceMedia))
-            {
-                startInfo.ArgumentList.Add("-vframes");
-                startInfo.ArgumentList.Add("1");
-                startInfo.ArgumentList.Add("-c:v");
-                startInfo.ArgumentList.Add("libwebp");
-                startInfo.ArgumentList.Add("-lossless");
-                startInfo.ArgumentList.Add("0");
-                startInfo.ArgumentList.Add("-quality");
-                startInfo.ArgumentList.Add("75");
-            }
-            else
-            {
-                startInfo.ArgumentList.Add("-c:v");
-                startInfo.ArgumentList.Add("libwebp_anim");
-                startInfo.ArgumentList.Add("-loop");
-                startInfo.ArgumentList.Add("0");
-                startInfo.ArgumentList.Add("-quality");
-                startInfo.ArgumentList.Add("65");
-                startInfo.ArgumentList.Add("-t");
-                startInfo.ArgumentList.Add(ToSeconds(sticker.DurationMs));
-            }
-
-            startInfo.ArgumentList.Add("-compression_level");
-            startInfo.ArgumentList.Add("6");
         }
         else
         {
@@ -296,22 +268,7 @@ public sealed class FfmpegStickerProcessor(
                 throw new InvalidOperationException("FFmpeg did not create WebP source frames.");
             }
 
-            if (IsStaticWebpSticker(sticker, sourceMedia))
-            {
-                await RunProcessAsync(
-                    ffmpegOptions.Value.CwebpExecutablePath,
-                    BuildCwebpArguments(framePaths[0], outputPath),
-                    $"cwebp sticker encode for sticker {sticker.Id}",
-                    cancellationToken);
-            }
-            else
-            {
-                await RunProcessAsync(
-                    ffmpegOptions.Value.Img2WebpExecutablePath,
-                    BuildImg2WebpArguments(framePaths, outputPath, GetVisualOutputFps(sticker.OutputFormat, options)),
-                    $"img2webp sticker encode for sticker {sticker.Id}",
-                    cancellationToken);
-            }
+            await EncodeTelegramStaticWebpAsync(framePaths[0], outputPath, sticker.Id, cancellationToken);
 
             if (!File.Exists(outputPath))
             {
@@ -367,57 +324,74 @@ public sealed class FfmpegStickerProcessor(
         arguments.Add($"{BuildVisualFilter(sticker, options, allowTransparentMask: true)},format=rgba");
         arguments.Add("-vsync");
         arguments.Add("0");
-
-        if (IsStaticWebpSticker(sticker, sourceMedia))
-        {
-            arguments.Add("-frames:v");
-            arguments.Add("1");
-        }
+        arguments.Add("-frames:v");
+        arguments.Add("1");
 
         arguments.Add(framePattern);
         return arguments;
     }
 
-    private static IReadOnlyList<string> BuildCwebpArguments(string inputPath, string outputPath) =>
+    private async Task EncodeTelegramStaticWebpAsync(
+        string inputPath,
+        string outputPath,
+        Guid stickerId,
+        CancellationToken cancellationToken)
+    {
+        foreach (var quality in TelegramStaticWebpQualityAttempts)
+        {
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+
+            await RunProcessAsync(
+                ffmpegOptions.Value.CwebpExecutablePath,
+                BuildCwebpArguments(inputPath, outputPath, quality),
+                $"cwebp Telegram static sticker encode for sticker {stickerId} at q{quality}",
+                cancellationToken);
+
+            var outputSizeBytes = new FileInfo(outputPath).Length;
+            if (outputSizeBytes <= TelegramStaticStickerMaxBytes)
+            {
+                logger.LogInformation(
+                    "Telegram WebP sticker encoded. StickerId: {StickerId}. Quality: {Quality}. SizeBytes: {SizeBytes}.",
+                    stickerId,
+                    quality,
+                    outputSizeBytes);
+                return;
+            }
+
+            logger.LogInformation(
+                "Telegram WebP sticker is larger than {MaxBytes} bytes, retrying with lower quality. StickerId: {StickerId}. Quality: {Quality}. SizeBytes: {SizeBytes}.",
+                TelegramStaticStickerMaxBytes,
+                stickerId,
+                quality,
+                outputSizeBytes);
+        }
+
+        if (File.Exists(outputPath))
+        {
+            File.Delete(outputPath);
+        }
+
+        throw new InvalidOperationException("WebP sticker exceeds Telegram's 512 KB static sticker limit.");
+    }
+
+    private static IReadOnlyList<string> BuildCwebpArguments(string inputPath, string outputPath, int quality) =>
         [
             "-quiet",
             "-q",
-            "80",
+            quality.ToString(CultureInfo.InvariantCulture),
             "-m",
             "6",
+            "-alpha_q",
+            "100",
+            "-metadata",
+            "none",
             inputPath,
             "-o",
             outputPath
         ];
-
-    private static IReadOnlyList<string> BuildImg2WebpArguments(
-        IReadOnlyList<string> framePaths,
-        string outputPath,
-        int outputFps)
-    {
-        var frameDurationMs = Math.Max(20, (int)Math.Round(1000d / outputFps));
-        var arguments = new List<string>
-        {
-            "-quiet",
-            "-loop",
-            "0",
-            "-q",
-            "75",
-            "-m",
-            "6"
-        };
-
-        foreach (var framePath in framePaths)
-        {
-            arguments.Add("-d");
-            arguments.Add(frameDurationMs.ToString(CultureInfo.InvariantCulture));
-            arguments.Add(framePath);
-        }
-
-        arguments.Add("-o");
-        arguments.Add(outputPath);
-        return arguments;
-    }
 
     private async Task RunProcessAsync(
         string executablePath,
@@ -587,7 +561,7 @@ public sealed class FfmpegStickerProcessor(
     {
         if (sticker.OutputFormat == StickerOutputFormat.Webp)
         {
-            return "format=rgba,scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000";
+            return BuildWebpShapeFilter(sticker, maxDimension);
         }
 
         var shape = sticker.Shape;
@@ -597,6 +571,17 @@ public sealed class FfmpegStickerProcessor(
             StickerShape.Original => $"scale={maxDimension}:{maxDimension}:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
             _ => $"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
         };
+    }
+
+    private static string BuildWebpShapeFilter(Sticker sticker, int maxDimension)
+    {
+        if (sticker.Shape == StickerShape.Original)
+        {
+            return $"format=rgba,scale={maxDimension}:{maxDimension}:force_original_aspect_ratio=decrease";
+        }
+
+        var (width, height) = GetTargetSize(sticker.Shape, maxDimension);
+        return $"format=rgba,scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}";
     }
 
     private static (int Width, int Height) GetTargetSize(StickerShape shape, int maxDimension) =>
@@ -664,7 +649,4 @@ public sealed class FfmpegStickerProcessor(
 
     private static bool SupportsAudio(StickerOutputFormat outputFormat) =>
         outputFormat == StickerOutputFormat.Mp4;
-
-    private static bool IsStaticWebpSticker(Sticker sticker, MediaFile sourceMedia) =>
-        sticker.OutputFormat == StickerOutputFormat.Webp && sourceMedia.Kind == MediaKind.Image;
 }
