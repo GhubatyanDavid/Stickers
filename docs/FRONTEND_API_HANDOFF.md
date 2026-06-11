@@ -36,16 +36,18 @@ All JSON enum values are serialized as strings.
 - Use audio from another uploaded audio or video file.
 - Trim video and audio from different time ranges.
 - Process sticker jobs asynchronously with queue/status polling.
-- Serve uploaded files, thumbnails, and generated sticker MP4/GIF files from
+- Serve uploaded files, thumbnails, and generated sticker MP4/GIF/WebP files from
   `/media/...`.
 
 ## Current MVP Limits
 
-- Sticker output defaults to MP4 video. GIF output is supported with
-  `audioMode: "Mute"` because GIF files cannot contain audio.
-- Circle shape requires GIF output so the outside edge can stay transparent.
+- Sticker output defaults to MP4 video. GIF and WebP output are supported with
+  `audioMode: "Mute"` because these sticker exports do not contain audio.
+- Circle shape requires GIF or WebP output so the outside edge can stay
+  transparent.
 - Background removal is color-key based, works best on simple solid-color
-  backgrounds, and currently supports only image/GIF sources with GIF output.
+  backgrounds, and currently supports only image/GIF sources with GIF or WebP
+  output.
   It is not AI person/object segmentation.
 - Sticker duration is limited by `Sticker:MaxDurationMs` (`30000` ms in the
   committed app settings).
@@ -130,7 +132,7 @@ Meaning:
 - `Original`: preserve the source aspect ratio. This is the default when
   omitted.
 - `Square`: center-crop to a 1:1 sticker.
-- `Circle`: center-crop to a transparent circular GIF sticker.
+- `Circle`: center-crop to a transparent circular GIF or WebP sticker.
 - `Portrait`: center-crop to a 4:5 sticker.
 - `Landscape`: center-crop to a 16:9 sticker.
 
@@ -409,7 +411,7 @@ Optional fields:
 - `audioSourceMediaId`
 - `audioTrimStartMs`
 - `audioTrimEndMs`
-- `outputFormat` (`"Mp4"` default, or `"Gif"`)
+- `outputFormat` (`"Mp4"` default, `"Gif"`, or `"Webp"`)
 - `shape` (`"Original"` default, `"Square"`, `"Circle"`, `"Portrait"`,
   `"Landscape"`)
 - `removeBackground` (`false` default)
@@ -481,9 +483,10 @@ GIF output is silent and loops forever:
 
 #### WebP Sticker Request
 
-Exports a `.webp` file. Image sources become static WebP. Video/GIF sources
-become animated WebP. Delivery as a sticker still depends on the receiving app's
-sticker/import/share flow.
+Exports a `.webp` file. Image sources become static WebP through `cwebp`.
+Video/GIF sources become animated WebP through `img2webp` after FFmpeg extracts
+transparent PNG frames. Delivery as a sticker still depends on the receiving
+app's sticker/import/share flow.
 
 ```json
 {
@@ -511,7 +514,7 @@ Center-crop the source into a 1:1 MP4 sticker:
 
 #### Circle Sticker Request
 
-Circle stickers use GIF output so the outside edge is transparent:
+Circle stickers use GIF or WebP output so the outside edge is transparent:
 
 ```json
 {
@@ -519,15 +522,16 @@ Circle stickers use GIF output so the outside edge is transparent:
   "trimStartMs": 0,
   "trimEndMs": 5000,
   "audioMode": "Mute",
-  "outputFormat": "Gif",
+  "outputFormat": "Webp",
   "shape": "Circle"
 }
 ```
 
 #### Remove Background From Image Or GIF
 
-This removes a solid-color background and exports a transparent GIF. Use the
-dominant background color. If `backgroundColor` is omitted, white is used.
+This removes a solid-color background and exports a transparent GIF or WebP.
+Use the dominant background color. If `backgroundColor` is omitted, white is
+used.
 
 ```json
 {
@@ -535,7 +539,7 @@ dominant background color. If `backgroundColor` is omitted, white is used.
   "trimStartMs": 0,
   "trimEndMs": 5000,
   "audioMode": "Mute",
-  "outputFormat": "Gif",
+  "outputFormat": "Webp",
   "removeBackground": true,
   "backgroundColor": "#ffffff",
   "backgroundSimilarity": 0.18,
@@ -750,9 +754,10 @@ Recommended polling behavior:
 
 Purpose:
 
-- Download the generated MP4 or GIF file.
+- Download the generated MP4, GIF, or WebP file.
 - The backend sets the download filename and content type from the actual saved
-  output file extension, so GIF stickers download as `.gif`.
+  output file extension, so GIF and WebP stickers download as `.gif` and
+  `.webp`.
 
 Success:
 
@@ -763,7 +768,7 @@ Recommended frontend behavior:
 
 - Use `sticker.downloadUrl` as the link target.
 - Use `sticker.outputFileName` for the HTML `download` attribute.
-- Do not hardcode `.mp4`; GIF stickers should keep `.gif`.
+- Do not hardcode `.mp4`; GIF and WebP stickers should keep `.gif` or `.webp`.
 - `downloadUrl` includes `?userId=...` for signed-in users so Android browser
   or WebView downloads can work without custom request headers.
 - On Android WebView, handle downloads through the native download listener or

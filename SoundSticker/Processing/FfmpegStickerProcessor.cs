@@ -40,6 +40,19 @@ public sealed class FfmpegStickerProcessor(
             sticker.TrimStartMs,
             sticker.DurationMs);
 
+        if (sticker.OutputFormat == StickerOutputFormat.Webp)
+        {
+            return await ProcessWebpStickerAsync(
+                sourceMedia,
+                sticker,
+                sourcePath,
+                storageRoot,
+                outputRelativePath,
+                outputPath,
+                options,
+                cancellationToken);
+        }
+
         var startInfo = new ProcessStartInfo
         {
             FileName = ffmpegOptions.Value.ExecutablePath,
@@ -244,6 +257,261 @@ public sealed class FfmpegStickerProcessor(
         }
 
         return path;
+    }
+
+    private async Task<ProcessedStickerFile> ProcessWebpStickerAsync(
+        MediaFile sourceMedia,
+        Sticker sticker,
+        string sourcePath,
+        string storageRoot,
+        string outputRelativePath,
+        string outputPath,
+        StickerOptions options,
+        CancellationToken cancellationToken)
+    {
+        var tempDirectory = Path.Combine(storageRoot, storageOptions.Value.TempPath, $"webp-{sticker.Id:N}");
+        if (Directory.Exists(tempDirectory))
+        {
+            Directory.Delete(tempDirectory, recursive: true);
+        }
+
+        Directory.CreateDirectory(tempDirectory);
+
+        try
+        {
+            var framePattern = Path.Combine(tempDirectory, "frame-%06d.png");
+            await RunProcessAsync(
+                ffmpegOptions.Value.ExecutablePath,
+                BuildWebpFrameExtractionArguments(sourceMedia, sticker, sourcePath, framePattern, options),
+                $"FFmpeg WebP frame extraction for sticker {sticker.Id}",
+                cancellationToken);
+
+            var framePaths = Directory
+                .EnumerateFiles(tempDirectory, "frame-*.png")
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToArray();
+
+            if (framePaths.Length == 0)
+            {
+                throw new InvalidOperationException("FFmpeg did not create WebP source frames.");
+            }
+
+            if (IsStaticWebpSticker(sticker, sourceMedia))
+            {
+                await RunProcessAsync(
+                    ffmpegOptions.Value.CwebpExecutablePath,
+                    BuildCwebpArguments(framePaths[0], outputPath),
+                    $"cwebp sticker encode for sticker {sticker.Id}",
+                    cancellationToken);
+            }
+            else
+            {
+                await RunProcessAsync(
+                    ffmpegOptions.Value.Img2WebpExecutablePath,
+                    BuildImg2WebpArguments(framePaths, outputPath, GetVisualOutputFps(sticker.OutputFormat, options)),
+                    $"img2webp sticker encode for sticker {sticker.Id}",
+                    cancellationToken);
+            }
+
+            if (!File.Exists(outputPath))
+            {
+                throw new InvalidOperationException("WebP encoder did not create an output file.");
+            }
+
+            var publicUrl = $"{StorageOptions.PublicRequestPath}/{outputRelativePath.Replace('\\', '/')}";
+            logger.LogInformation(
+                "WebP sticker processing succeeded. StickerId: {StickerId}. OutputRelativePath: {OutputRelativePath}.",
+                sticker.Id,
+                outputRelativePath);
+
+            return new ProcessedStickerFile(outputRelativePath, publicUrl);
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(tempDirectory);
+        }
+    }
+
+    private static IReadOnlyList<string> BuildWebpFrameExtractionArguments(
+        MediaFile sourceMedia,
+        Sticker sticker,
+        string sourcePath,
+        string framePattern,
+        StickerOptions options)
+    {
+        var arguments = new List<string>
+        {
+            "-y",
+            "-hide_banner",
+            "-nostdin"
+        };
+
+        if (sourceMedia.Kind == MediaKind.Image)
+        {
+            if (!IsStaticWebpSticker(sticker, sourceMedia))
+            {
+                arguments.Add("-loop");
+                arguments.Add("1");
+                arguments.Add("-framerate");
+                arguments.Add(GetVisualOutputFps(sticker.OutputFormat, options).ToString(CultureInfo.InvariantCulture));
+                arguments.Add("-t");
+                arguments.Add(ToSeconds(sticker.DurationMs));
+            }
+        }
+        else
+        {
+            arguments.Add("-ss");
+            arguments.Add(ToSeconds(sticker.TrimStartMs));
+            arguments.Add("-t");
+            arguments.Add(ToSeconds(sticker.DurationMs));
+        }
+
+        arguments.Add("-i");
+        arguments.Add(sourcePath);
+        arguments.Add("-vf");
+        arguments.Add($"{BuildVisualFilter(sticker, options, allowTransparentMask: true)},format=rgba");
+        arguments.Add("-vsync");
+        arguments.Add("0");
+
+        if (IsStaticWebpSticker(sticker, sourceMedia))
+        {
+            arguments.Add("-frames:v");
+            arguments.Add("1");
+        }
+
+        arguments.Add(framePattern);
+        return arguments;
+    }
+
+    private static IReadOnlyList<string> BuildCwebpArguments(string inputPath, string outputPath) =>
+        [
+            "-quiet",
+            "-q",
+            "80",
+            "-m",
+            "6",
+            inputPath,
+            "-o",
+            outputPath
+        ];
+
+    private static IReadOnlyList<string> BuildImg2WebpArguments(
+        IReadOnlyList<string> framePaths,
+        string outputPath,
+        int outputFps)
+    {
+        var frameDurationMs = Math.Max(20, (int)Math.Round(1000d / outputFps));
+        var arguments = new List<string>
+        {
+            "-quiet",
+            "-loop",
+            "0",
+            "-q",
+            "75",
+            "-m",
+            "6"
+        };
+
+        foreach (var framePath in framePaths)
+        {
+            arguments.Add("-d");
+            arguments.Add(frameDurationMs.ToString(CultureInfo.InvariantCulture));
+            arguments.Add(framePath);
+        }
+
+        arguments.Add("-o");
+        arguments.Add(outputPath);
+        return arguments;
+    }
+
+    private async Task RunProcessAsync(
+        string executablePath,
+        IReadOnlyList<string> arguments,
+        string description,
+        CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executablePath,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var timeout = new CancellationTokenSource(GetProcessingTimeout());
+        using var combinedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+        var processingToken = combinedCancellation.Token;
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException($"Could not start {description}.");
+        using var cancellationRegistration = processingToken.Register(() =>
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+            }
+            catch (InvalidOperationException)
+            {
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Could not kill process for {Description}.", description);
+            }
+        });
+
+        string standardError;
+        string standardOutput;
+        try
+        {
+            var standardErrorTask = process.StandardError.ReadToEndAsync(processingToken);
+            var standardOutputTask = process.StandardOutput.ReadToEndAsync(processingToken);
+            await process.WaitForExitAsync(processingToken);
+            standardError = await standardErrorTask;
+            standardOutput = await standardOutputTask;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException($"{description} timed out.");
+        }
+
+        if (process.ExitCode == 0)
+        {
+            return;
+        }
+
+        logger.LogWarning(
+            "{Description} failed. Exit code: {ExitCode}. Output: {Output}. Error: {Error}",
+            description,
+            process.ExitCode,
+            standardOutput,
+            standardError);
+        throw new InvalidOperationException($"{description} failed.");
+    }
+
+    private void DeleteTemporaryDirectory(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(path, recursive: true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(exception, "Could not delete temporary directory. Path: {Path}.", path);
+        }
     }
 
     private static string BuildFilterGraph(Sticker sticker, StickerOptions options)

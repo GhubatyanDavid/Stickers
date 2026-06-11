@@ -4,10 +4,10 @@ Backend playground for creating short sound stickers from uploaded media.
 
 `SoundSticker` is an ASP.NET Core MVP that accepts local media uploads, stores
 them on disk, and uses FFmpeg in a background worker to build short MP4 sticker
-clips or silent GIFs. Stickers can be moving video/GIF clips or looped image-based clips with
-optional audio. Video and audio can be trimmed independently, so a sticker can
-keep its original audio, become silent, or use audio from another uploaded audio
-or video file.
+clips, silent GIFs, or WebP stickers. Stickers can be moving video/GIF clips or
+looped image-based clips with optional audio. Video and audio can be trimmed
+independently, so a sticker can keep its original audio, become silent, or use
+audio from another uploaded audio or video file.
 
 ## Highlights
 
@@ -20,6 +20,7 @@ or video file.
 - Reuse audio from the source video or attach audio from another uploaded file.
 - Loop still images into generated MP4 or GIF stickers.
 - Export silent looping GIF stickers with `outputFormat: "Gif"`.
+- Export static or animated WebP stickers with `outputFormat: "Webp"`.
 - Export square, circle, portrait, and landscape sticker shapes.
 - Remove simple solid-color backgrounds from image and GIF sources.
 - Process stickers asynchronously and query their status.
@@ -58,6 +59,8 @@ Requirements:
 - FFmpeg available in `PATH`, or an explicit `Ffmpeg:ExecutablePath`
 - FFprobe available in `PATH`, or an explicit `Ffmpeg:ProbeExecutablePath` for
   preview duration metadata
+- Google WebP tools available in `PATH` for WebP output. On Ubuntu install the
+  `webp` package, which provides `cwebp` and `img2webp`.
 
 Start the API:
 
@@ -78,7 +81,9 @@ If FFmpeg is not available in `PATH`, configure it in app settings:
 {
   "Ffmpeg": {
     "ExecutablePath": "C:\\path\\to\\ffmpeg.exe",
-    "ProbeExecutablePath": "C:\\path\\to\\ffprobe.exe"
+    "ProbeExecutablePath": "C:\\path\\to\\ffprobe.exe",
+    "CwebpExecutablePath": "C:\\path\\to\\cwebp.exe",
+    "Img2WebpExecutablePath": "C:\\path\\to\\img2webp.exe"
   }
 }
 ```
@@ -148,12 +153,13 @@ and `GET /api/stickers/all` for the public-ready list without a user header.
 Omit `outputFormat` for MP4, or send `"outputFormat": "Gif"` with
 `"audioMode": "Mute"` for a silent looping GIF.
 Send `"outputFormat": "Webp"` with `"audioMode": "Mute"` for a `.webp` file.
-Image sources produce static WebP; video or GIF sources produce animated WebP.
+Image sources produce static WebP with `cwebp`; video or GIF sources produce
+animated WebP with `img2webp` after FFmpeg extracts transparent PNG frames.
 Omit `shape` for the source aspect ratio, or send `"Square"`, `"Circle"`,
 `"Portrait"`, or `"Landscape"`; circle output should use a muted transparent
 format such as `"Gif"` or `"Webp"`.
 Use `"removeBackground": true` with image/GIF sources and
-`"outputFormat": "Gif"` to remove a simple solid-color background; pass
+`"outputFormat": "Gif"` or `"Webp"` to remove a simple solid-color background; pass
 `"backgroundColor"` as a hex color for best results.
 `DELETE /api/stickers/{id}` returns `{ "isDelete": true }` for the current
 user's deleted sticker and `{ "isDelete": false }` when it is missing or belongs
@@ -246,7 +252,7 @@ selected audio clip is shorter, the rest of the sticker stays silent.
 - Media and sticker metadata are stored in PostgreSQL.
 - On startup the API can create the required `media_files` and `stickers`
   tables when `Persistence:AutoCreateSchema` is enabled.
-- Deleting a sticker removes its database job record and generated MP4/GIF file
+- Deleting a sticker removes its database job record and generated MP4/GIF/WebP file
   when one exists.
-- Sticker export defaults to MP4 video output and can also produce silent GIF
-  output.
+- Sticker export defaults to MP4 video output and can also produce silent GIF or
+  WebP output.

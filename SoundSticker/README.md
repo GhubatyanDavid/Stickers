@@ -9,15 +9,15 @@ ASP.NET Core backend for the sound sticker MVP.
 - Store uploaded media under `storage/originals`.
 - Store media and sticker metadata in PostgreSQL.
 - Create a moving sticker job from an uploaded video or GIF.
-- Create an image sticker job from an uploaded image by looping it into MP4 or GIF.
+- Create an image sticker job from an uploaded image by looping it into MP4, GIF, or WebP.
 - Export original-aspect, square, circle, portrait, and landscape stickers.
 - Remove simple solid-color backgrounds from image and GIF sources.
 - Keep original video audio, mute it, or use audio from another uploaded audio/video file.
 - Trim video and audio tracks from different time ranges.
 - Process sticker jobs in a background worker.
-- Save generated MP4/GIF stickers under `storage/stickers`.
+- Save generated MP4/GIF/WebP stickers under `storage/stickers`.
 - Mark stickers as private or public during creation.
-- Delete old or failed sticker jobs and their generated MP4/GIF files.
+- Delete old or failed sticker jobs and their generated MP4/GIF/WebP files.
 - Serve local media files from `/media`.
 
 ## Run locally
@@ -68,10 +68,16 @@ both tools and make sure `ffmpeg` and `ffprobe` are available in `PATH`, or set:
 {
   "Ffmpeg": {
     "ExecutablePath": "C:\\path\\to\\ffmpeg.exe",
-    "ProbeExecutablePath": "C:\\path\\to\\ffprobe.exe"
+    "ProbeExecutablePath": "C:\\path\\to\\ffprobe.exe",
+    "CwebpExecutablePath": "C:\\path\\to\\cwebp.exe",
+    "Img2WebpExecutablePath": "C:\\path\\to\\img2webp.exe"
   }
 }
 ```
+
+WebP output also needs Google's WebP tools. On Ubuntu install them with
+`sudo apt install webp`; the package provides `cwebp` for static WebP and
+`img2webp` for animated WebP.
 
 ## Current MVP endpoints
 
@@ -120,14 +126,15 @@ Use `"Mute"` for silent stickers.
 Use `"outputFormat": "Gif"` with `"audioMode": "Mute"` to export a silent
 looping GIF. If `outputFormat` is omitted, the backend exports MP4.
 Use `"outputFormat": "Webp"` with `"audioMode": "Mute"` to export a `.webp`
-file. Image sources produce static WebP; video or GIF sources produce animated
-WebP.
+file. Image sources produce static WebP with `cwebp`; video or GIF sources
+produce animated WebP with `img2webp` after FFmpeg extracts transparent PNG
+frames.
 Use `"shape": "Square"` for a square crop, `"shape": "Portrait"` for 4:5, and
 `"shape": "Landscape"` for 16:9. Use `"shape": "Circle"` with
 `"outputFormat": "Gif"` or `"Webp"` and `"audioMode": "Mute"` for a
 transparent circular sticker.
 Use `"removeBackground": true` with image/GIF sources and
-`"outputFormat": "Gif"` to remove a simple solid-color background. Pass
+`"outputFormat": "Gif"` or `"Webp"` to remove a simple solid-color background. Pass
 `"backgroundColor": "#ffffff"` or another hex color; if omitted, white is used.
 Use `"isPublic": true` when the sticker should appear in `/api/stickers/all`.
 Private stickers stay visible only in that user's `/api/stickers/my` list.
@@ -142,8 +149,8 @@ Sticker responses include `isFavorite` for the current user. Use
 
 `POST /api/stickers/from-image` accepts the same request shape. For image
 sources, use `"Mute"` or `"UseMedia"` because images do not have original
-audio. The image is looped for `trimEndMs - trimStartMs` and exported as MP4 or
-GIF depending on `outputFormat`.
+audio. The image is looped for `trimEndMs - trimStartMs` and exported as MP4,
+GIF, or WebP depending on `outputFormat`.
 
 `DELETE /api/stickers/{id}` returns `{ "isDelete": true }` when the sticker
 belonged to the current user and was deleted. It returns `{ "isDelete": false }`
