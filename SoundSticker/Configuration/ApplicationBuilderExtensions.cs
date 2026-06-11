@@ -1,5 +1,6 @@
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.StaticFiles;
 using Npgsql;
 using SoundSticker.Auth;
 using SoundSticker.Contracts;
@@ -30,10 +31,14 @@ public static class ApplicationBuilderExtensions
         app.UseSwaggerUI();
         app.UseExceptionHandler();
         app.UsePostgresExceptionHandler();
+        var contentTypeProvider = new FileExtensionContentTypeProvider();
+        contentTypeProvider.Mappings[".webp"] = "image/webp";
+
         app.UseStaticFiles(new StaticFileOptions
         {
             FileProvider = new PhysicalFileProvider(storageRootPath),
-            RequestPath = StorageOptions.PublicRequestPath
+            RequestPath = StorageOptions.PublicRequestPath,
+            ContentTypeProvider = contentTypeProvider
         });
     }
 

@@ -348,15 +348,10 @@ public sealed class FfmpegStickerProcessor(
 
         if (sourceMedia.Kind == MediaKind.Image)
         {
-            if (!IsStaticWebpSticker(sticker, sourceMedia))
-            {
-                arguments.Add("-loop");
-                arguments.Add("1");
-                arguments.Add("-framerate");
-                arguments.Add(GetVisualOutputFps(sticker.OutputFormat, options).ToString(CultureInfo.InvariantCulture));
-                arguments.Add("-t");
-                arguments.Add(ToSeconds(sticker.DurationMs));
-            }
+            arguments.Add("-loop");
+            arguments.Add("1");
+            arguments.Add("-t");
+            arguments.Add("1");
         }
         else
         {
