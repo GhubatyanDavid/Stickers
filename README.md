@@ -121,6 +121,9 @@ GET  /api/stickers/my
 GET  /api/stickers/all
 GET  /api/stickers/{id}
 GET  /api/stickers/{id}/status
+GET  /api/telegram/connect
+POST /api/telegram/webhook
+POST /api/stickers/{id}/telegram/send
 POST /api/stickers/{id}/favorite
 DELETE /api/stickers/{id}/favorite
 DELETE /api/stickers/{id}
@@ -173,6 +176,36 @@ delete button only when that value is `true`.
 Sticker list/get responses include `isFavorite` for the current user. Use
 `POST /api/stickers/{id}/favorite` and `DELETE /api/stickers/{id}/favorite` to
 update it.
+
+## Telegram Bot Sending
+
+The backend can send a ready WebP sticker as a real Telegram sticker through a
+bot. Create a bot with BotFather, then configure these values outside git:
+
+```bash
+export Telegram__BotToken="123456:bot-token"
+export Telegram__BotUsername="your_bot_username"
+export Telegram__WebhookSecretToken="long-random-secret"
+```
+
+Point Telegram to the backend webhook:
+
+```bash
+curl "https://api.telegram.org/bot$Telegram__BotToken/setWebhook" \
+  -d "url=https://your-domain.com/api/telegram/webhook" \
+  -d "secret_token=$Telegram__WebhookSecretToken"
+```
+
+Frontend flow:
+
+1. Call `GET /api/telegram/connect` with `X-User-Id`.
+2. Open the returned `startUrl` once in Telegram so the bot can link that user
+   to a Telegram chat.
+3. Create a sticker with `"outputFormat": "Webp"` and wait until it is `Ready`.
+4. Call `POST /api/stickers/{id}/telegram/send` with `X-User-Id`.
+
+This uses Telegram Bot API `sendSticker`; manually attaching the `.webp` file in
+Telegram may still show it as media instead of a sticker.
 
 Use one time range for video and a different time range for audio from the same
 video:

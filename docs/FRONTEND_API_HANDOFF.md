@@ -777,6 +777,76 @@ Recommended frontend behavior:
 - On Android WebView, handle downloads through the native download listener or
   DownloadManager; a plain `fetch` blob flow may not save files reliably.
 
+### GET /api/telegram/connect
+
+Purpose:
+
+- Return the Telegram bot start URL for the current `X-User-Id`.
+- Show this when the user wants to send generated WebP stickers as real
+  Telegram stickers through the bot.
+
+Success:
+
+- `200 OK`
+- Body:
+
+```json
+{
+  "isConfigured": true,
+  "isLinked": false,
+  "botUsername": "your_bot_username",
+  "startUrl": "https://t.me/your_bot_username?start=su_encoded-user-id",
+  "connectedUsername": null,
+  "connectedAt": null,
+  "instructions": "Open the startUrl once from Telegram..."
+}
+```
+
+Frontend behavior:
+
+- Open `startUrl` in Telegram.
+- Poll or re-fetch this endpoint after the user starts the bot.
+- When `isLinked` is `true`, `POST /api/stickers/{id}/telegram/send` can send
+  ready WebP stickers through Telegram Bot API `sendSticker`.
+
+### POST /api/telegram/webhook
+
+Purpose:
+
+- Public Telegram webhook endpoint.
+- Telegram calls this when the user opens the bot with the `startUrl`.
+- The backend stores `X-User-Id` to Telegram `chat_id` mapping.
+
+Frontend behavior:
+
+- Do not call this endpoint directly.
+- Configure it once on the server with Telegram `setWebhook`.
+
+### POST /api/stickers/{id}/telegram/send
+
+Purpose:
+
+- Send a ready `"Webp"` sticker to the current user's linked Telegram chat as a
+  real Telegram sticker.
+
+Success:
+
+- `200 OK`
+- Body:
+
+```json
+{
+  "sent": true,
+  "message": "Sticker sent to Telegram."
+}
+```
+
+Errors:
+
+- `409 Conflict` when Telegram is not connected or the sticker is not ready.
+- `400 Bad Request` when the sticker is not a WebP sticker.
+- `404 Not Found` when the sticker or output file is missing.
+
 ### POST /api/stickers/{id}/favorite
 
 Purpose:

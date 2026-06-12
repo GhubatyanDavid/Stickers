@@ -96,6 +96,9 @@ GET  /api/stickers/all                    public ready stickers only
 GET  /api/stickers/{id}                   owned or ready public sticker
 GET  /api/stickers/{id}/status            owned or ready public sticker
 GET  /api/stickers/{id}/download          owned or ready public sticker
+GET  /api/telegram/connect                X-User-Id required
+POST /api/telegram/webhook                Telegram webhook
+POST /api/stickers/{id}/telegram/send     X-User-Id required, sends ready WebP via bot
 POST /api/stickers/{id}/favorite          owned or ready public sticker
 DELETE /api/stickers/{id}/favorite        owned or ready public sticker
 DELETE /api/stickers/{id}                 X-User-Id required, returns isDelete
@@ -145,6 +148,30 @@ Sticker responses include `isDelete`; show the delete button only when it is
 Sticker responses include `isFavorite` for the current user. Use
 `POST /api/stickers/{id}/favorite` to set it true and
 `DELETE /api/stickers/{id}/favorite` to set it false.
+
+## Telegram bot setup
+
+Create a Telegram bot with BotFather and configure the token through environment
+variables or a systemd override:
+
+```ini
+[Service]
+Environment="Telegram__BotToken=123456:bot-token"
+Environment="Telegram__BotUsername=your_bot_username"
+Environment="Telegram__WebhookSecretToken=long-random-secret"
+```
+
+Register the webhook:
+
+```bash
+curl "https://api.telegram.org/bot$Telegram__BotToken/setWebhook" \
+  -d "url=https://your-domain.com/api/telegram/webhook" \
+  -d "secret_token=$Telegram__WebhookSecretToken"
+```
+
+The frontend should call `GET /api/telegram/connect`, open the returned
+`startUrl`, then call `POST /api/stickers/{id}/telegram/send` after creating a
+ready `"Webp"` sticker.
 
 `POST /api/stickers/from-image` accepts the same request shape. For image
 sources, use `"Mute"` or `"UseMedia"` because images do not have original

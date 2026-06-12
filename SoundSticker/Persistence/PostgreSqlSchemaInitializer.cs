@@ -61,6 +61,15 @@ public sealed class PostgreSqlSchemaInitializer(
                 PRIMARY KEY (sticker_id, owner_user_id)
             );
 
+            CREATE TABLE IF NOT EXISTS telegram_chat_links (
+                owner_user_id text PRIMARY KEY,
+                chat_id bigint NOT NULL,
+                telegram_user_id bigint NULL,
+                username text NULL,
+                connected_at timestamp with time zone NOT NULL,
+                updated_at timestamp with time zone NOT NULL
+            );
+
             ALTER TABLE media_files
                 ADD COLUMN IF NOT EXISTS owner_user_id text NOT NULL DEFAULT 'legacy';
 
@@ -98,6 +107,7 @@ public sealed class PostgreSqlSchemaInitializer(
             CREATE INDEX IF NOT EXISTS ix_stickers_public_ready_created_at ON stickers (is_public, status, created_at DESC);
             CREATE INDEX IF NOT EXISTS ix_stickers_status ON stickers (status);
             CREATE INDEX IF NOT EXISTS ix_sticker_favorites_owner_created_at ON sticker_favorites (owner_user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS ix_telegram_chat_links_chat_id ON telegram_chat_links (chat_id);
             """);
 
         await command.ExecuteNonQueryAsync(cancellationToken);

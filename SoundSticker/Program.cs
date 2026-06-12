@@ -15,5 +15,6 @@ var api = app.MapGroup("/api");
 api.MapUploadEndpoints();
 api.MapMediaEndpoints();
 api.MapStickerEndpoints();
+api.MapTelegramEndpoints();
 
 app.Run();

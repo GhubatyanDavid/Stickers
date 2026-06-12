@@ -10,6 +10,7 @@ using SoundSticker.Infrastructure;
 using SoundSticker.Options;
 using SoundSticker.Persistence;
 using SoundSticker.Processing;
+using SoundSticker.Telegram;
 
 namespace SoundSticker.Configuration;
 
@@ -62,6 +63,7 @@ public static class ServiceCollectionExtensions
         builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
         builder.Services.Configure<StickerOptions>(builder.Configuration.GetSection(StickerOptions.SectionName));
         builder.Services.Configure<FfmpegOptions>(builder.Configuration.GetSection(FfmpegOptions.SectionName));
+        builder.Services.Configure<TelegramOptions>(builder.Configuration.GetSection(TelegramOptions.SectionName));
         builder.Services.Configure<PersistenceOptions>(builder.Configuration.GetSection(PersistenceOptions.SectionName));
         builder.Services.Configure<ForwardedHeadersOptions>(options =>
         {
@@ -77,6 +79,7 @@ public static class ServiceCollectionExtensions
 
         builder.Services.AddPersistence(builder.Configuration, persistenceOptions);
         builder.Services.AddStorageAndProcessing();
+        builder.Services.AddTelegramIntegration();
         builder.Services.AddScoped<ICurrentUser, HeaderCurrentUser>();
 
         return persistenceOptions;
@@ -130,6 +133,7 @@ public static class ServiceCollectionExtensions
         if (!persistenceOptions.IsPostgreSql)
         {
             services.AddSingleton<IMediaRepository, InMemoryMediaRepository>();
+            services.AddSingleton<ITelegramLinkRepository, InMemoryTelegramLinkRepository>();
             return;
         }
 
@@ -144,6 +148,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(_ => PostgresDataSourceFactory.GetConnectionInfo(connectionString));
         services.AddSingleton<PostgreSqlSchemaInitializer>();
         services.AddSingleton<IMediaRepository, PostgreSqlMediaRepository>();
+        services.AddSingleton<ITelegramLinkRepository, PostgreSqlTelegramLinkRepository>();
     }
 
     private static void AddStorageAndProcessing(this IServiceCollection services)
@@ -156,6 +161,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IStickerProcessor, FfmpegStickerProcessor>();
         services.AddHostedService<StickerProcessingWorker>();
         services.AddHostedService<TempFileCleanupService>();
+    }
+
+    private static void AddTelegramIntegration(this IServiceCollection services)
+    {
+        services.AddHttpClient<TelegramBotService>(client =>
+        {
+            client.BaseAddress = new Uri("https://api.telegram.org/");
+        });
     }
 
     private static string GetClientIp(HttpContext context) =>
