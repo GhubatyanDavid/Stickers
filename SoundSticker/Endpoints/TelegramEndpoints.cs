@@ -116,10 +116,22 @@ public static class TelegramEndpoints
             message.Chat.Id,
             message.From?.Id);
 
-        await telegramBot.SendMessageAsync(
-            message.Chat.Id,
-            "Telegram connected. You can now send ready WebP stickers from SoundSticker.",
-            cancellationToken);
+        try
+        {
+            await telegramBot.SendMessageAsync(
+                message.Chat.Id,
+                "Telegram connected. You can now send ready WebP stickers from SoundSticker.",
+                cancellationToken);
+        }
+        catch (TelegramApiException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Telegram connect confirmation message failed. OwnerUserId: {OwnerUserId}. ChatId: {ChatId}. StatusCode: {StatusCode}.",
+                ownerUserId,
+                message.Chat.Id,
+                exception.StatusCode);
+        }
 
         return Results.Ok(new { ok = true });
     }

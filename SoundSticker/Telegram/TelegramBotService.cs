@@ -27,20 +27,11 @@ public sealed class TelegramBotService(
             new KeyValuePair<string, string>("text", text)
         ]);
 
-        var requestUri = $"bot{options.BotToken}/sendMessage";
-        using var response = await httpClient.PostAsync(requestUri, content, cancellationToken);
-        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-        var apiResponse = TryDeserializeResponse(responseBody);
-        if (response.IsSuccessStatusCode && apiResponse?.Ok == true)
-        {
-            return;
-        }
-
-        logger.LogWarning(
-            "Telegram sendMessage failed. StatusCode: {StatusCode}. Description: {Description}. Body: {Body}",
-            (int)response.StatusCode,
-            apiResponse?.Description,
-            responseBody);
+        await SendTelegramRequestAsync(
+            "sendMessage",
+            $"bot{options.BotToken}/sendMessage",
+            content,
+            cancellationToken);
     }
 
     public async Task SendStickerAsync(
@@ -63,26 +54,59 @@ public sealed class TelegramBotService(
             { new StreamContent(stickerStream), "sticker", Path.GetFileName(stickerPath) }
         };
 
-        var requestUri = $"bot{options.BotToken}/sendSticker";
-        using var response = await httpClient.PostAsync(requestUri, content, cancellationToken);
-        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        await SendTelegramRequestAsync(
+            "sendSticker",
+            $"bot{options.BotToken}/sendSticker",
+            content,
+            cancellationToken);
 
-        var apiResponse = TryDeserializeResponse(responseBody);
-        if (response.IsSuccessStatusCode && apiResponse?.Ok == true)
+        logger.LogInformation("Telegram sticker sent. ChatId: {ChatId}. StickerPath: {StickerPath}.", chatId, stickerPath);
+    }
+
+    private async Task SendTelegramRequestAsync(
+        string methodName,
+        string requestUri,
+        HttpContent content,
+        CancellationToken cancellationToken)
+    {
+        try
         {
-            logger.LogInformation("Telegram sticker sent. ChatId: {ChatId}. StickerPath: {StickerPath}.", chatId, stickerPath);
-            return;
-        }
+            using var response = await httpClient.PostAsync(requestUri, content, cancellationToken);
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            var apiResponse = TryDeserializeResponse(responseBody);
+            if (response.IsSuccessStatusCode && apiResponse?.Ok == true)
+            {
+                return;
+            }
 
-        logger.LogWarning(
-            "Telegram sendSticker failed. StatusCode: {StatusCode}. Description: {Description}. Body: {Body}",
-            (int)response.StatusCode,
-            apiResponse?.Description,
-            responseBody);
-        throw new TelegramApiException(
-            (int)response.StatusCode,
-            apiResponse?.Description ?? "Telegram sendSticker failed.",
-            responseBody);
+            logger.LogWarning(
+                "Telegram {MethodName} failed. StatusCode: {StatusCode}. Description: {Description}. Body: {Body}",
+                methodName,
+                (int)response.StatusCode,
+                apiResponse?.Description,
+                responseBody);
+
+            throw new TelegramApiException(
+                (int)response.StatusCode,
+                apiResponse?.Description ?? $"Telegram {methodName} failed.",
+                responseBody);
+        }
+        catch (HttpRequestException exception)
+        {
+            logger.LogWarning(exception, "Telegram {MethodName} HTTP request failed.", methodName);
+            throw new TelegramApiException(
+                0,
+                $"Telegram {methodName} HTTP request failed: {exception.Message}",
+                exception.ToString());
+        }
+        catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(exception, "Telegram {MethodName} request timed out.", methodName);
+            throw new TelegramApiException(
+                0,
+                $"Telegram {methodName} request timed out.",
+                exception.ToString());
+        }
     }
 
     private TelegramApiResponse? TryDeserializeResponse(string responseBody)
