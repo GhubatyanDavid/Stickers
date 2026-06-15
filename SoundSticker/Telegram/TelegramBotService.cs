@@ -29,7 +29,7 @@ public sealed class TelegramBotService(
 
         await SendTelegramRequestAsync(
             "sendMessage",
-            $"bot{options.BotToken}/sendMessage",
+            BuildTelegramApiUrl(options.BotToken, "sendMessage"),
             content,
             cancellationToken);
     }
@@ -56,7 +56,7 @@ public sealed class TelegramBotService(
 
         await SendTelegramRequestAsync(
             "sendSticker",
-            $"bot{options.BotToken}/sendSticker",
+            BuildTelegramApiUrl(options.BotToken, "sendSticker"),
             content,
             cancellationToken);
 
@@ -121,6 +121,9 @@ public sealed class TelegramBotService(
             return null;
         }
     }
+
+    private static string BuildTelegramApiUrl(string botToken, string methodName) =>
+        $"https://api.telegram.org/bot{botToken}/{methodName}";
 
     private sealed record TelegramApiResponse(bool Ok, string? Description);
 }
