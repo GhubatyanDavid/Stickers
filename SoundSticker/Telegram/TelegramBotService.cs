@@ -79,7 +79,10 @@ public sealed class TelegramBotService(
             (int)response.StatusCode,
             apiResponse?.Description,
             responseBody);
-        throw new InvalidOperationException(apiResponse?.Description ?? "Telegram sendSticker failed.");
+        throw new TelegramApiException(
+            (int)response.StatusCode,
+            apiResponse?.Description ?? "Telegram sendSticker failed.",
+            responseBody);
     }
 
     private TelegramApiResponse? TryDeserializeResponse(string responseBody)

@@ -12,6 +12,7 @@ namespace SoundSticker.Endpoints;
 
 public static class TelegramEndpoints
 {
+    private const long TelegramStaticStickerMaxBytes = 512 * 1024;
     private const string SecretTokenHeaderName = "X-Telegram-Bot-Api-Secret-Token";
     private const string StartPayloadPrefix = "su_";
 
@@ -165,15 +166,151 @@ public static class TelegramEndpoints
             return Results.NotFound(new ProblemResponse("Sticker output file was not found."));
         }
 
+        var validationError = ValidateTelegramStaticWebp(fullPath);
+        if (validationError is not null)
+        {
+            logger.LogWarning(
+                "Telegram sticker validation failed. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}. Error: {ValidationError}.",
+                id,
+                ownerUserId,
+                validationError);
+            return Results.BadRequest(new ProblemResponse(validationError));
+        }
+
         logger.LogInformation(
             "Sending sticker to Telegram. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}. ChatId: {ChatId}.",
             id,
             ownerUserId,
             link.ChatId);
 
-        await telegramBot.SendStickerAsync(link.ChatId, fullPath, emoji, cancellationToken);
+        try
+        {
+            await telegramBot.SendStickerAsync(link.ChatId, fullPath, emoji, cancellationToken);
+        }
+        catch (TelegramApiException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Telegram API rejected sticker send. StickerId: {StickerId}. OwnerUserId: {OwnerUserId}. StatusCode: {StatusCode}.",
+                id,
+                ownerUserId,
+                exception.StatusCode);
+            return Results.BadRequest(new ProblemResponse($"Telegram sendSticker failed: {exception.Message}"));
+        }
+
         return Results.Ok(new TelegramSendStickerResponse(true, "Sticker sent to Telegram."));
     }
+
+    private static string? ValidateTelegramStaticWebp(string fullPath)
+    {
+        var fileInfo = new FileInfo(fullPath);
+        if (fileInfo.Length <= 0)
+        {
+            return "Telegram sticker WebP file is empty.";
+        }
+
+        if (fileInfo.Length > TelegramStaticStickerMaxBytes)
+        {
+            return $"Telegram static sticker WebP must be at most {TelegramStaticStickerMaxBytes} bytes.";
+        }
+
+        if (!TryReadWebpMetadata(fullPath, out var width, out var height, out var isAnimated))
+        {
+            return "Telegram sticker output is not a readable WebP image.";
+        }
+
+        if (isAnimated)
+        {
+            return "Telegram static sticker must be a static WebP, but this file is animated. Recreate the sticker with the updated WebP exporter.";
+        }
+
+        if (width > 512 || height > 512)
+        {
+            return $"Telegram static sticker WebP must fit inside 512x512. Current size is {width}x{height}.";
+        }
+
+        if (width != 512 && height != 512)
+        {
+            return $"Telegram static sticker WebP must have one side exactly 512px. Current size is {width}x{height}.";
+        }
+
+        return null;
+    }
+
+    private static bool TryReadWebpMetadata(
+        string fullPath,
+        out int width,
+        out int height,
+        out bool isAnimated)
+    {
+        width = 0;
+        height = 0;
+        isAnimated = false;
+
+        var bytes = File.ReadAllBytes(fullPath);
+        if (bytes.Length < 20 ||
+            !HasAscii(bytes, 0, "RIFF") ||
+            !HasAscii(bytes, 8, "WEBP"))
+        {
+            return false;
+        }
+
+        var offset = 12;
+        while (offset + 8 <= bytes.Length)
+        {
+            var chunk = Encoding.ASCII.GetString(bytes, offset, 4);
+            var chunkSize = ReadUInt32LittleEndian(bytes, offset + 4);
+            var dataOffset = offset + 8;
+            if (chunkSize > int.MaxValue || dataOffset + chunkSize > bytes.Length)
+            {
+                return false;
+            }
+
+            if (chunk == "ANIM")
+            {
+                isAnimated = true;
+            }
+            else if (chunk == "VP8X" && chunkSize >= 10)
+            {
+                width = 1 + ReadUInt24LittleEndian(bytes, dataOffset + 4);
+                height = 1 + ReadUInt24LittleEndian(bytes, dataOffset + 7);
+            }
+            else if (chunk == "VP8 " && chunkSize >= 10 && HasVp8StartCode(bytes, dataOffset))
+            {
+                width = ReadUInt16LittleEndian(bytes, dataOffset + 6) & 0x3fff;
+                height = ReadUInt16LittleEndian(bytes, dataOffset + 8) & 0x3fff;
+            }
+            else if (chunk == "VP8L" && chunkSize >= 5 && bytes[dataOffset] == 0x2f)
+            {
+                width = 1 + (((bytes[dataOffset + 2] & 0x3f) << 8) | bytes[dataOffset + 1]);
+                height = 1 + (((bytes[dataOffset + 4] & 0x0f) << 10) | (bytes[dataOffset + 3] << 2) | ((bytes[dataOffset + 2] & 0xc0) >> 6));
+            }
+
+            var paddedChunkSize = chunkSize + (chunkSize % 2);
+            offset = dataOffset + checked((int)paddedChunkSize);
+        }
+
+        return width > 0 && height > 0;
+    }
+
+    private static bool HasAscii(byte[] bytes, int offset, string value) =>
+        offset + value.Length <= bytes.Length &&
+        Encoding.ASCII.GetString(bytes, offset, value.Length) == value;
+
+    private static bool HasVp8StartCode(byte[] bytes, int dataOffset) =>
+        dataOffset + 6 <= bytes.Length &&
+        bytes[dataOffset + 3] == 0x9d &&
+        bytes[dataOffset + 4] == 0x01 &&
+        bytes[dataOffset + 5] == 0x2a;
+
+    private static int ReadUInt16LittleEndian(byte[] bytes, int offset) =>
+        bytes[offset] | (bytes[offset + 1] << 8);
+
+    private static int ReadUInt24LittleEndian(byte[] bytes, int offset) =>
+        bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
+
+    private static uint ReadUInt32LittleEndian(byte[] bytes, int offset) =>
+        (uint)(bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24));
 
     private static bool IsValidSecretToken(HttpContext httpContext, TelegramOptions options)
     {
